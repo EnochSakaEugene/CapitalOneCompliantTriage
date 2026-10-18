@@ -1,4 +1,5 @@
 "use client";
+import { Experiments } from "@/components/experiments";
 import { Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useLive } from "@/lib/useLive";
@@ -13,9 +14,11 @@ export default function EvaluationPage() {
     <>
       <PageHeader
         title="Evaluation"
-        subtitle="AI labels compared with the CFPB's own product and issue labels on triaged complaints."
+        subtitle="AI labels compared with the CFPB's own product and issue labels: controlled experiments, then live triage."
         actions={<RefreshControl updatedAt={updatedAt} loading={loading} onRefresh={refresh} />}
       />
+      <Experiments />
+      <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Live triage accuracy (cases triaged in the queue)</h2>
       {d.n === 0 ? (
         <Card>
           <p className="text-sm text-muted">No triaged complaints yet.</p>

@@ -152,6 +152,45 @@ export interface RiskItem {
   updated_at: string | null;
 }
 
+export interface EvalMetrics {
+  n?: number;
+  errors?: number;
+  product_accuracy?: number | null;
+  issue_accuracy?: number | null;
+  issue_top2_accuracy?: number | null;
+  product_macro_f1?: number | null;
+  label_valid_rate?: number | null;
+  high_risk_rate?: number | null;
+  latency_ms_mean?: number | null;
+  latency_ms_p95?: number | null;
+  input_tokens_mean?: number;
+  output_tokens_mean?: number;
+  cost_per_1k_usd?: number | null;
+  consistency?: number | null;
+  consistency_n?: number;
+}
+
+export interface EvalRunSummary {
+  id: number;
+  name: string;
+  variant: string;
+  label: string;
+  model: string;
+  status: "running" | "done" | "stopped" | "failed";
+  n_planned: number;
+  n_done: number;
+  metrics: EvalMetrics;
+  config: Record<string, unknown>;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface EvalRunDetail extends EvalRunSummary {
+  per_product: { product: string; n: number; product_accuracy: number | null; issue_accuracy: number | null }[];
+  misses: { complaint_id: number; true_product: string; pred_product: string; true_issue: string; pred_issue: string; raw_issue: string }[];
+  errors: { complaint_id: number; error: string }[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}/api${path}`, {
     ...init,
@@ -215,6 +254,17 @@ export const api = {
       body: JSON.stringify({ query, k }),
     }),
   governance: () => request<Governance>("/governance"),
+  evalRuns: () => request<EvalRunSummary[]>("/eval/runs"),
+  evalBatches: () =>
+    request<{ name: string; runs: number; done: number; running: number; n: number | null; started_at: string | null }[]>(
+      "/eval/batches",
+    ),
+  evalRun: (id: number) => request<EvalRunDetail>(`/eval/runs/${id}`),
+  evalReportMd: async (name?: string) => {
+    const qs = name ? `?name=${encodeURIComponent(name)}` : "";
+    const res = await fetch(`${API_URL}/api/eval/report.md${qs}`, { cache: "no-store" });
+    return res.text();
+  },
   risks: () => request<RiskItem[]>("/governance/risks"),
   saveRisk: (r: Omit<RiskItem, "updated_at" | "indicator"> & { reviewer: string }) =>
     request<RiskItem>(`/governance/risks/${r.id}`, { method: "PUT", body: JSON.stringify(r) }),

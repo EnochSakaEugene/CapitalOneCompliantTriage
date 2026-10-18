@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # so switching provider only needs `python -m scripts.ingest_policies`, not a schema change.
     embedding_dim: int = 1536
 
+    # Classifier prompt used by the live pipeline: v1 | v2 | v3 (see app/agents/prompts.py)
+    classifier_prompt_version: str = "v2"
+    # Optional prices (USD per 1M tokens) so the evaluation runner can estimate cost.
+    # Copy them from your provider's pricing page; 0 means "not set".
+    price_input_per_mtok_fast: float = 0.0
+    price_output_per_mtok_fast: float = 0.0
+
     cors_origins: str = "http://localhost:3000"
     response_deadline_days: int = 15   # CFPB: company response expected within 15 days
     rag_top_k: int = 3

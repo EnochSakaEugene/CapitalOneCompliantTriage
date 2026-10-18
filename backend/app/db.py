@@ -24,6 +24,10 @@ def init_db() -> None:
         with engine.begin() as conn:
             conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
     Base.metadata.create_all(engine)
+    # Lightweight migrations for columns added after a table already existed.
+    if settings.is_postgres:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE eval_cases ADD COLUMN IF NOT EXISTS alt_issue VARCHAR(300)"))
 
 
 def get_db() -> Iterator[Session]:

@@ -8,10 +8,13 @@ back to rule-based logic.
 import hashlib
 import math
 import re
+import warnings
 
 from app.config import get_settings
 
 settings = get_settings()
+# Some Gemini models ignore temperature and warn on every call; noted in the model card instead.
+warnings.filterwarnings("ignore", message=".*uses fixed sampling defaults.*")
 
 
 def get_chat(strong: bool = False, effort: bool = True):
@@ -36,13 +39,23 @@ def get_chat(strong: bool = False, effort: bool = True):
     )
 
 
-def structured(schema, strong: bool = False):
+def structured(schema, strong: bool = False, include_raw: bool = False):
     """Chat model that returns `schema`. On Gemini, if the model rejects the
-    reasoning-effort setting, retry once with the model's default thinking."""
-    runnable = get_chat(strong).with_structured_output(schema)
+    reasoning-effort setting, retry once with the model's default thinking.
+    include_raw=True returns {"raw": AIMessage, "parsed": schema, "parsing_error": ...}
+    so callers can read token usage."""
+    runnable = get_chat(strong).with_structured_output(schema, include_raw=include_raw)
     if settings.provider == "gemini" and settings.gemini_reasoning_effort:
-        runnable = runnable.with_fallbacks([get_chat(strong, effort=False).with_structured_output(schema)])
+        runnable = runnable.with_fallbacks(
+            [get_chat(strong, effort=False).with_structured_output(schema, include_raw=include_raw)]
+        )
     return runnable
+
+
+def usage_of(raw) -> dict:
+    """Token counts from an AIMessage (LangChain usage_metadata), or zeros."""
+    meta = getattr(raw, "usage_metadata", None) or {}
+    return {"input_tokens": int(meta.get("input_tokens", 0) or 0), "output_tokens": int(meta.get("output_tokens", 0) or 0)}
 
 
 def model_name(strong: bool = False) -> str:

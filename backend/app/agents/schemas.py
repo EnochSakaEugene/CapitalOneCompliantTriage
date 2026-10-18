@@ -29,6 +29,10 @@ class Classification(BaseModel):
     summary: str = Field(description="Neutral 2-3 sentence summary of the complaint for an analyst")
 
 
+class ClassificationV4(Classification):
+    issue_alt: str = Field(description="Second most likely issue under the same product, copied exactly")
+
+
 class Draft(BaseModel):
     reply: str = Field(description="Draft response letter to the consumer")
 
@@ -38,6 +42,7 @@ class TriageState(TypedDict, total=False):
     narrative: str            # PII-redacted narrative
     date_received: str | None
     taxonomy: dict[str, list[str]]   # product -> CFPB issues
+    examples: list[dict] | None      # few-shot examples (prompt v3 only)
     classification: dict
     citations: list[dict]
     prior_similar: int

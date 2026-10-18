@@ -113,3 +113,45 @@ class RiskItem(Base):
     owner: Mapped[str] = mapped_column(String(100), default="Unassigned")
     status: Mapped[str] = mapped_column(String(20), default="open")  # open | monitoring | mitigated
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class EvalRun(Base):
+    """One evaluation run: a classifier variant scored on a fixed set of held-out complaints."""
+
+    __tablename__ = "eval_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100))
+    variant: Mapped[str] = mapped_column(String(20))         # rules | v1 | v2 | v3
+    model: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20), default="running")  # running | done | failed
+    n_planned: Mapped[int] = mapped_column(Integer, default=0)
+    n_done: Mapped[int] = mapped_column(Integer, default=0)
+    metrics: Mapped[dict] = mapped_column(JSON, default=dict)
+    config: Mapped[dict] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class EvalCase(Base):
+    """One complaint scored in an evaluation run (repeat > 0 = consistency re-run)."""
+
+    __tablename__ = "eval_cases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("eval_runs.id"), index=True)
+    complaint_id: Mapped[int] = mapped_column(ForeignKey("complaints.id"))
+    repeat: Mapped[int] = mapped_column(Integer, default=0)
+    true_product: Mapped[str | None] = mapped_column(String(200))
+    true_issue: Mapped[str | None] = mapped_column(String(300))
+    pred_product: Mapped[str | None] = mapped_column(String(200))
+    pred_issue: Mapped[str | None] = mapped_column(String(300))
+    raw_issue: Mapped[str | None] = mapped_column(String(300))      # model's label before snapping
+    alt_issue: Mapped[str | None] = mapped_column(String(300))      # second-choice issue (v4+)
+    in_taxonomy: Mapped[bool | None] = mapped_column()
+    risk_level: Mapped[str | None] = mapped_column(String(10))
+    risk_flags: Mapped[list] = mapped_column(JSON, default=list)
+    ms: Mapped[int | None] = mapped_column(Integer)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    error: Mapped[str | None] = mapped_column(Text)
