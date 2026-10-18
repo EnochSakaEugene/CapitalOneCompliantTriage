@@ -1,12 +1,15 @@
 """REST API used by the Next.js front end."""
+import difflib
 from collections import Counter
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.agents.graph import run_triage
+from app.agents.graph import load_taxonomy, run_triage
+from app.agents.verify import check as verify_draft
 from app.llm import model_name
 from app.audit import log_event
 from app.config import get_settings
@@ -14,9 +17,19 @@ from app.db import get_db
 from app.models import AuditEvent, Complaint, PolicyChunk, Triage, User
 from app.security import current_user, require_roles
 from app.serializers import audit_dict, complaint_detail, complaint_row
+from app.similar import similar_cases
 
 router = APIRouter(dependencies=[Depends(current_user)])  # every endpoint needs a login
 settings = get_settings()
+
+
+class CorrectIn(BaseModel):
+    product: str
+    issue: str
+
+
+class VerifyIn(BaseModel):
+    reply: str
 
 
 class ReviewIn(BaseModel):
@@ -108,11 +121,16 @@ def approve(complaint_id: int, body: ReviewIn, db: Session = Depends(get_db),
     c = _get(db, complaint_id)
     if not c.triage:
         raise HTTPException(400, "Complaint has not been triaged")
-    edited = body.final_reply is not None and body.final_reply != c.triage.draft_reply
-    c.triage.final_reply = body.final_reply or c.triage.draft_reply
+    final = body.final_reply or c.triage.draft_reply or ""
+    draft = c.triage.draft_reply or ""
+    edited = bool(draft) and final != draft
+    c.triage.final_reply = final
     c.triage.reviewer = user.username
+    c.triage.reviewed_at = datetime.now()
+    # 0 = sent as drafted, 1 = completely rewritten (automation-bias and quality signal)
+    c.triage.edit_ratio = round(1 - difflib.SequenceMatcher(None, draft, final).ratio(), 3) if draft else None
     c.status = "approved"
-    log_event(db, f"user:{user.username}", "approve", complaint_id, edited=edited)
+    log_event(db, f"user:{user.username}", "approve", complaint_id, edited=edited, edit_ratio=c.triage.edit_ratio)
     db.commit()
     return get_complaint(complaint_id, db)
 
@@ -135,12 +153,61 @@ def close(complaint_id: int, body: ReviewIn, db: Session = Depends(get_db),
     """Compliance closes an escalated case after handling it."""
     c = _get(db, complaint_id)
     c.status = "closed"
-    if c.triage and body.final_reply:
-        c.triage.final_reply = body.final_reply
+    if c.triage:
+        c.triage.reviewed_at = datetime.now()
         c.triage.reviewer = user.username
+        if body.final_reply:
+            c.triage.final_reply = body.final_reply
     log_event(db, f"user:{user.username}", "close", complaint_id, reason=body.reason)
     db.commit()
     return get_complaint(complaint_id, db)
+
+
+@router.post("/cases/{complaint_id}/correct")
+def correct_labels(complaint_id: int, body: CorrectIn, db: Session = Depends(get_db),
+                   user: User = Depends(require_roles("analyst", "compliance"))):
+    """Analyst fixes the AI's product/issue. Recorded for monitoring and few-shot learning."""
+    c = _get(db, complaint_id)
+    if not c.triage:
+        raise HTTPException(400, "Complaint has not been triaged")
+    taxonomy = load_taxonomy(db)
+    if body.product not in taxonomy or body.issue not in taxonomy[body.product]:
+        raise HTTPException(400, "Product and issue must come from the CFPB taxonomy")
+    t = c.triage
+    same = (body.product, body.issue) == (t.pred_product, t.pred_issue)
+    t.corrected_product = None if same else body.product
+    t.corrected_issue = None if same else body.issue
+    t.corrected_by = None if same else user.username
+    log_event(db, f"user:{user.username}", "correct_labels", complaint_id,
+              ai={"product": t.pred_product, "issue": t.pred_issue},
+              analyst={"product": body.product, "issue": body.issue}, cleared=same)
+    db.commit()
+    return get_complaint(complaint_id, db)
+
+
+@router.post("/cases/{complaint_id}/verify")
+def verify_reply(complaint_id: int, body: VerifyIn, db: Session = Depends(get_db),
+                 user: User = Depends(require_roles("analyst", "compliance"))):
+    """Re-run the hallucination check on an edited reply before approving it."""
+    c = _get(db, complaint_id)
+    if not c.triage:
+        raise HTTPException(400, "Complaint has not been triaged")
+    result = verify_draft(body.reply, c.triage.citations or [], c.triage.translation or c.narrative)
+    log_event(db, f"user:{user.username}", "verify_reply", complaint_id, score=result["score"],
+              unsupported=len(result["unsupported"]))
+    db.commit()
+    return result
+
+
+@router.get("/cases/{complaint_id}/similar")
+def similar(complaint_id: int, k: int = Query(3, ge=1, le=10), db: Session = Depends(get_db)):
+    _get(db, complaint_id)
+    return similar_cases(db, complaint_id, k)
+
+
+@router.get("/meta/taxonomy")
+def taxonomy(db: Session = Depends(get_db)):
+    return load_taxonomy(db)
 
 
 @router.get("/insights")

@@ -29,6 +29,16 @@ def triage_dict(t: Triage | None) -> dict | None:
         "draft_reply": t.draft_reply,
         "final_reply": t.final_reply,
         "reviewer": t.reviewer,
+        "grounding": t.grounding,
+        "injection": t.injection,
+        "language": t.language or "en",
+        "translation": t.translation,
+        "corrected_product": t.corrected_product,
+        "corrected_issue": t.corrected_issue,
+        "corrected_by": t.corrected_by,
+        "edit_ratio": t.edit_ratio,
+        "total_ms": t.total_ms,
+        "tokens": {"in": t.tokens_in or 0, "out": t.tokens_out or 0},
         "model_info": {k: v for k, v in (t.model_info or {}).items() if k != "trace"},
         "trace": (t.model_info or {}).get("trace", []),
     }
@@ -49,6 +59,9 @@ def complaint_row(c: Complaint) -> dict:
         "confidence": t.confidence if t else None,
         "deadline": t.deadline.isoformat() if t and t.deadline else None,
         "days_left": days_left(t.deadline) if t else None,
+        "source": c.source or "cfpb",
+        "language": (t.language or "en") if t else None,
+        "grounding_score": (t.grounding or {}).get("score") if t else None,
     }
 
 
@@ -61,6 +74,7 @@ def complaint_detail(c: Complaint) -> dict:
         "state": c.state,
         "submitted_via": c.submitted_via,
         "tags": c.tags,
+        "source": c.source or "cfpb",
         # Ground truth from CFPB, shown separately so reviewers can compare.
         "cfpb_labels": {"product": c.product, "issue": c.issue, "sub_product": c.sub_product},
         "triage": triage_dict(c.triage),

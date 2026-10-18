@@ -109,8 +109,9 @@ def classify(narrative: str, taxonomy: dict[str, list[str]]) -> dict:
     }
 
 
-def draft(classification: dict, citations: list[dict]) -> str:
+def draft(classification: dict, citations: list[dict], language: str = "en") -> str:
     rule = citations[0]["title"] if citations else "applicable consumer protection rules"
+    note = "\n[MOCK MODE: a Spanish reply needs an LLM; English shown]" if language == "es" else ""
     return (
         "Dear Customer,\n\n"
         f"Thank you for contacting us about your {classification['product'].lower()} concern "
@@ -120,5 +121,5 @@ def draft(classification: dict, citations: list[dict]) -> str:
         "outcome and any corrective steps once the review is complete.\n\n"
         "If you have additional information, please reply to this message.\n\n"
         "Sincerely,\n[Analyst name]\nCustomer Resolution Team\n\n"
-        "[MOCK DRAFT - generated without an LLM]"
+        "[MOCK DRAFT - generated without an LLM]" + note
     )

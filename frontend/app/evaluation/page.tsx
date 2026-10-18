@@ -1,4 +1,5 @@
 "use client";
+import { Adaptation, RagAblation } from "@/components/adaptation";
 import { Experiments } from "@/components/experiments";
 import { Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
 import { api } from "@/lib/api";
@@ -18,6 +19,10 @@ export default function EvaluationPage() {
         actions={<RefreshControl updatedAt={updatedAt} loading={loading} onRefresh={refresh} />}
       />
       <Experiments />
+      <div className="mb-6 space-y-4">
+        <Adaptation />
+        <RagAblation />
+      </div>
       <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Live triage accuracy (cases triaged in the queue)</h2>
       {d.n === 0 ? (
         <Card>

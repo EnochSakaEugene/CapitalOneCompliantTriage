@@ -10,7 +10,10 @@ from app.routers.api import router
 from app.routers.auth import router as auth_router
 from app.routers.evals import router as evals_router
 from app.routers.governance import router as governance_router
+from app.routers.business import router as business_router
+from app.routers.intake import router as intake_router
 from app.routers.knowledge import router as knowledge_router
+from app.routers.ops import router as ops_router
 
 settings = get_settings()
 
@@ -25,8 +28,11 @@ async def lifespan(_: FastAPI):
     from app.models import EvalRun
 
     with SessionLocal() as db:
-        db.execute(update(EvalRun).where(EvalRun.status == "running")
+        db.execute(update(EvalRun).where(EvalRun.status == "running", EvalRun.variant.not_like("draft-%"))
                    .values(status="stopped", metrics={"note": "stopped by a server restart"}))
+        # RAG-ablation runs keep their partial results (resumable), only the status changes.
+        db.execute(update(EvalRun).where(EvalRun.status == "running", EvalRun.variant.like("draft-%"))
+                   .values(status="stopped"))
         db.commit()
         # First start: create the demo users so the team can log in.
         from scripts.seed_users import seed
@@ -38,7 +44,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="TriageIQ API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="TriageIQ API", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.cors_origins.split(",")],
@@ -50,6 +56,9 @@ app.include_router(router, prefix="/api")
 app.include_router(knowledge_router, prefix="/api")
 app.include_router(governance_router, prefix="/api")
 app.include_router(evals_router, prefix="/api")
+app.include_router(intake_router, prefix="/api")
+app.include_router(ops_router, prefix="/api")
+app.include_router(business_router, prefix="/api")
 
 
 @app.get("/api/ping")

@@ -33,7 +33,7 @@ export function useLive<T>(fetcher: () => Promise<T>, deps: unknown[] = [], inte
     const tick = () => {
       if (document.visibilityState === "visible") refresh();
     };
-    const id = window.setInterval(tick, intervalMs);
+    const id = intervalMs > 0 ? window.setInterval(tick, intervalMs) : undefined; // 0 = load once (+ on focus)
     window.addEventListener("focus", tick);
     document.addEventListener("visibilitychange", tick);
     return () => {

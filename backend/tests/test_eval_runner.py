@@ -27,7 +27,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 @pytest.fixture(scope="module")
 def db():
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS eval_cases, eval_runs, audit_events, triage, policy_chunks, "
+        conn.execute(text("DROP TABLE IF EXISTS few_shot_examples, eval_cases, eval_runs, audit_events, triage, policy_chunks, "
                           "complaints, risk_register CASCADE"))
     init_db()
     subprocess.run([sys.executable, "-m", "scripts.load_cfpb", "--csv", "tests/fixtures/synthetic_complaints.csv",

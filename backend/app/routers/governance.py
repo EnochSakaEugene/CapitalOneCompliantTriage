@@ -20,6 +20,11 @@ LEVELS = {"low", "medium", "high"}
 STATUSES = {"open", "monitoring", "mitigated"}
 MIN_GROUP = 20  # groups smaller than this are flagged as too small to compare
 
+OLD_INJ_MIT = "System prompts treat complaint text as data; structured outputs with fixed schemas; human review of replies."
+NEW_INJ_MIT = ("Rule-based injection screen before any LLM call (red-team tested on the Governance page); flagged "
+               "complaints go to Compliance with no auto-draft; prompts treat complaint text as data; fixed output "
+               "schemas; output check for leaked instructions; human approval of every reply.")
+
 DEFAULT_RISKS = [
     ("Missed escalation: a high-risk complaint (fraud, discrimination, servicemember) is routed to auto-draft",
      "accuracy", "medium", "high",
@@ -43,8 +48,8 @@ DEFAULT_RISKS = [
      "redaction counts logged.", "pii_redactions"),
     ("Prompt injection: complaint text tries to change the AI's instructions",
      "security", "low", "medium",
-     "System prompts treat complaint text as data; structured outputs with fixed schemas; human review of replies.",
-     None),
+     NEW_INJ_MIT,
+     "injection_flags"),
     ("Automation bias: analysts approve AI drafts without real review",
      "oversight", "medium", "medium",
      "Approve-without-edit rate monitored; reviewer and edits recorded in the audit log; periodic sample audits.",
@@ -60,6 +65,32 @@ DEFAULT_RISKS = [
 ]
 
 
+# Added after the first release; seeded into existing registers once (matched by risk text).
+ADDED_RISKS = [
+    ("Copyright / IP: generated replies or the knowledge base reproduce third-party text without permission",
+     "legal", "low", "medium",
+     "Knowledge base holds team-written summaries of public regulations (government works) with source links, "
+     "not copied commercial text; replies are short original drafts reviewed by staff; AI tools used are "
+     "documented in the report as the course requires.", None),
+    ("Misuse: staff use TriageIQ to auto-deny claims, pressure customers or skip required investigations",
+     "misuse", "low", "high",
+     "The system never sends, closes or denies on its own; drafts may not admit liability or promise outcomes; "
+     "high-risk cases require Compliance; every action is logged per user for audit; role-based permissions.",
+     None),
+    ("Hallucinated facts in a draft reach a customer",
+     "accuracy", "medium", "high",
+     "Independent hallucination check on every draft (claims vs. policy excerpts); unsupported sentences "
+     "highlighted to the reviewer; RAG ablation measured; human approval required.", "grounded_mean"),
+    ("Unequal service for customers who write in Spanish or other languages",
+     "fairness", "medium", "medium",
+     "Language detection, translation for analysts and replies in the customer's language; monitor accuracy "
+     "and escalation by language once volumes allow.", None),
+    ("Over-reliance on historical data for trend alerts (CFPB narratives end Aug 2026)",
+     "operational", "medium", "low",
+     "Emerging-issue alerts state their data window; in production they run on live TriageIQ labels.", None),
+]
+
+
 class RiskIn(BaseModel):
     risk: str = Field(min_length=5, max_length=300)
     category: str = Field(min_length=3, max_length=50)
@@ -71,10 +102,20 @@ class RiskIn(BaseModel):
 
 
 def _seed(db: Session) -> None:
-    if db.scalar(select(func.count()).select_from(RiskItem)):
-        return
-    for risk, cat, lik, imp, mit, ind in DEFAULT_RISKS:
-        db.add(RiskItem(risk=risk, category=cat, likelihood=lik, impact=imp, mitigation=mit, indicator=ind))
+    existing = db.scalars(select(RiskItem)).all()
+    if not existing:
+        for risk, cat, lik, imp, mit, ind in DEFAULT_RISKS:
+            db.add(RiskItem(risk=risk, category=cat, likelihood=lik, impact=imp, mitigation=mit, indicator=ind))
+    texts = {r.risk for r in existing}
+    for risk, cat, lik, imp, mit, ind in ADDED_RISKS:
+        if existing and risk not in texts:
+            db.add(RiskItem(risk=risk, category=cat, likelihood=lik, impact=imp, mitigation=mit, indicator=ind))
+    if not existing:
+        for risk, cat, lik, imp, mit, ind in ADDED_RISKS:
+            db.add(RiskItem(risk=risk, category=cat, likelihood=lik, impact=imp, mitigation=mit, indicator=ind))
+    for r in existing:  # upgrade the original prompt-injection row if nobody edited it
+        if r.mitigation == OLD_INJ_MIT:
+            r.mitigation, r.indicator = NEW_INJ_MIT, "injection_flags"
     db.commit()
 
 
@@ -193,6 +234,32 @@ def _model_card(db: Session, acc: dict) -> dict:
     }
 
 
+def _quality_indicators(db: Session) -> dict:
+    tris = db.scalars(select(Triage).where(Triage.grounding.is_not(None))).all()
+    scores = [t.grounding["score"] for t in tris if (t.grounding or {}).get("score") is not None]
+    flags = db.scalar(select(func.count()).select_from(AuditEvent)
+                      .where(AuditEvent.action == "prompt_injection_flagged")) or 0
+    return {"grounded_mean": round(sum(scores) / len(scores), 3) if scores else None, "injection_flags": flags}
+
+
+@router.get("/redteam")
+def redteam_results(db: Session = Depends(get_db)):
+    """Run the red-team set through the injection screen, plus a false-positive check on up to
+    1,000 real CFPB complaints (assumed benign)."""
+    from app import redteam
+    from app.guard import screen
+
+    result = redteam.run()
+    narratives = db.scalars(select(Complaint.narrative).where(Complaint.source != "intake")
+                            .order_by(Complaint.id).limit(1000)).all()
+    flagged = [n[:200] for n in narratives if screen(n)["detected"]]
+    result["real_checked"] = len(narratives)
+    result["real_flagged"] = len(flagged)
+    result["real_flag_rate"] = round(len(flagged) / len(narratives), 4) if narratives else None
+    result["real_flagged_examples"] = flagged[:5]
+    return result
+
+
 @router.get("")
 def overview(db: Session = Depends(get_db)):
     acc = _accuracy(db)
@@ -202,6 +269,7 @@ def overview(db: Session = Depends(get_db)):
         "model_card": _model_card(db, acc),
         "fairness": _fairness(db),
         "indicators": {
+            **_quality_indicators(db),
             "override_rate": oversight["override_rate"],
             "approve_without_edit_rate": oversight["approve_without_edit_rate"],
             "pii_redactions": oversight["pii_redactions"],

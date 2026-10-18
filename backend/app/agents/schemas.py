@@ -39,7 +39,12 @@ class Draft(BaseModel):
 
 class TriageState(TypedDict, total=False):
     complaint_id: int
-    narrative: str            # PII-redacted narrative
+    narrative: str            # PII-redacted narrative (original language)
+    narrative_en: str         # English text used by the classifier (translation if needed)
+    language: str             # en | es | other
+    translation: str | None
+    injection: dict           # prompt-injection screen result
+    grounding: dict           # hallucination check of the draft
     date_received: str | None
     taxonomy: dict[str, list[str]]   # product -> CFPB issues
     examples: list[dict] | None      # few-shot examples (prompt v3 only)

@@ -20,7 +20,15 @@ VARIANT_LABELS = {
     "v2": "v2 zero-shot + CFPB taxonomy",
     "v3": "v3 few-shot + CFPB taxonomy",
     "v4": "v4 taxonomy + disambiguation rules",
+    "tfidf": "TF-IDF + logistic regression (trained)",
+    "embed": "Embeddings + logistic regression (trained)",
+    "draft-rag": "Draft WITH policy excerpts (RAG)",
+    "draft-norag": "Draft WITHOUT excerpts (ablation)",
 }
+
+
+def _is_drafting(variant: str) -> bool:
+    return variant.startswith("draft-")
 
 
 def _run(r: EvalRun) -> dict:
@@ -45,6 +53,8 @@ def list_batches(db: Session = Depends(get_db)):
     """Run batches (one `run_eval` invocation = one name), newest first."""
     out: dict[str, dict] = {}
     for r in db.scalars(select(EvalRun).order_by(EvalRun.id.desc())).all():
+        if _is_drafting(r.variant):
+            continue
         b = out.setdefault(r.name, {"name": r.name, "runs": 0, "done": 0, "running": 0,
                                     "n": (r.config or {}).get("n"), "started_at": None})
         b["runs"] += 1
@@ -52,6 +62,20 @@ def list_batches(db: Session = Depends(get_db)):
         b["running"] += r.status == "running"
         b["started_at"] = r.started_at.isoformat() if r.started_at else b["started_at"]
     return list(out.values())
+
+
+@router.get("/drafting")
+def drafting_runs(db: Session = Depends(get_db)):
+    """RAG ablation runs (scripts.run_rag_ablation): hallucination with vs without retrieval."""
+    runs = db.scalars(select(EvalRun).where(EvalRun.variant.like("draft-%")).order_by(EvalRun.id.desc())).all()
+    return [_run(r) for r in runs]
+
+
+@router.get("/approaches")
+def approaches():
+    from app.adaptation import APPROACHES
+
+    return APPROACHES
 
 
 @router.get("/runs/{run_id}")

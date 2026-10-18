@@ -6,6 +6,8 @@ Variants
   v2     zero-shot + CFPB taxonomy (current default)
   v3     few-shot (1 train example per product) + CFPB taxonomy
   v4     v2 + disambiguation rules + second-choice issue (top-2 issue accuracy)
+  tfidf  TF-IDF + logistic regression trained on the train split (model adaptation, local)
+  embed  Gemini embeddings + logistic regression (needs scripts.embed_complaints first)
 
 Start a batch (from backend/, or `docker compose exec backend ...`):
   python -m scripts.run_eval --variants rules,v2,v4 --n 100 --seed 2026 --rpm 8 --name "batch 2"
@@ -36,12 +38,13 @@ from sqlalchemy import delete, func, select
 
 from app.agents.classifier import classify
 from app.agents.graph import _closest, load_taxonomy, snap_to_taxonomy
+from app.adaptation import TRAINED_VARIANTS, TrainedClassifier
 from app.agents.prompts import PROMPT_VERSIONS, few_shot_examples
 from app.config import get_settings
 from app.db import SessionLocal, init_db
 from app.evaluation import compute_metrics
 from app.llm import model_name
-from app.models import Complaint, EvalCase, EvalRun
+from app.models import Complaint, EvalCase, EvalRun, FewShotExample
 from app.pii import redact
 
 # gemini-3.5-flash-lite ignores temperature and warns on every call; the fact is noted in the report.
@@ -87,9 +90,12 @@ class Budget:
 
 
 def sample_ids(db, n: int, seed: int) -> list[int]:
+    # Analyst-corrected cases promoted into prompts are excluded so evaluation never leaks.
+    promoted = select(FewShotExample.complaint_id)
     ids = db.scalars(
         select(Complaint.id).where(Complaint.split == "test", Complaint.product.is_not(None),
-                                   Complaint.issue.is_not(None)).order_by(Complaint.id)
+                                   Complaint.issue.is_not(None), Complaint.id.not_in(promoted))
+        .order_by(Complaint.id)
     ).all()
     rnd = random.Random(seed)
     return rnd.sample(list(ids), min(n, len(ids)))
@@ -126,18 +132,28 @@ def plan_for(ids: list[int], uses_llm: bool, consistency: int) -> list[tuple[int
     return plan
 
 
+def model_label(variant: str) -> str:
+    if variant == "rules":
+        return "keyword-rules"
+    if variant == "tfidf":
+        return "tfidf+logreg (local)"
+    if variant == "embed":
+        return f"{settings.gemini_embedding_model if settings.provider == 'gemini' else settings.embedding_model}+logreg"
+    return model_name()
+
+
 def get_or_create_run(db, variant, ids, name, seed, rpm, consistency, examples, resume) -> EvalRun:
-    uses_llm = variant != "rules"
+    uses_llm = variant in PROMPT_VERSIONS
     if resume:
         run = db.scalars(select(EvalRun).where(EvalRun.name == name, EvalRun.variant == variant)
                          .order_by(EvalRun.id.desc())).first()
         if run:
             return run
     run = EvalRun(
-        name=name, variant=variant, model=model_name() if uses_llm else "keyword-rules",
+        name=name, variant=variant, model=model_label(variant),
         n_planned=len(plan_for(ids, uses_llm, consistency)),
         config={"seed": seed, "n": len(ids), "rpm": rpm, "consistency": consistency if uses_llm else 0,
-                "prompt": PROMPT_VERSIONS.get(variant, "Keyword rules baseline"),
+                "prompt": PROMPT_VERSIONS.get(variant) or TRAINED_VARIANTS.get(variant) or "Keyword rules baseline",
                 "few_shot_examples": len(examples or []), "complaint_ids": ids},
     )
     db.add(run)
@@ -146,14 +162,25 @@ def get_or_create_run(db, variant, ids, name, seed, rpm, consistency, examples, 
 
 
 def run_variant(db, variant, ids, taxonomy, name, seed, rpm, consistency, pacer=None, budget=None, resume=False):
-    uses_llm = variant != "rules"
+    uses_llm = variant in PROMPT_VERSIONS
     if uses_llm and settings.mock_llm:
         print(f"Skipping {variant}: no Gemini/OpenAI key is set (mock mode).", file=sys.stderr)
         return None
+    trained = None
+    if variant in TRAINED_VARIANTS:
+        try:
+            trained = TrainedClassifier(variant).fit(db)
+        except RuntimeError as exc:
+            print(f"Skipping {variant}: {exc}", file=sys.stderr)
+            return None
+        print(f"  trained {variant} on {trained.info['n_train']} train complaints in "
+              f"{trained.info['fit_seconds']}s", file=sys.stderr)
     pacer = pacer or Pacer(rpm)
     budget = budget or Budget(None)
     examples = few_shot_examples(db, taxonomy) if variant == "v3" else None
     run = get_or_create_run(db, variant, ids, name, seed, rpm, consistency, examples, resume)
+    if trained:
+        run.config = {**(run.config or {}), "training": trained.info}
     if run.status == "done":
         print(f"\n[{variant}] run #{run.id} already finished, skipping.", file=sys.stderr)
         return run
@@ -172,7 +199,13 @@ def run_variant(db, variant, ids, taxonomy, name, seed, rpm, consistency, pacer=
         for cid, rep in todo:
             c = complaints[cid]
             narrative, _ = redact(c.narrative)
-            out, err = classify_with_retry(variant, narrative, taxonomy, examples, pacer, budget, uses_llm)
+            if trained:
+                try:
+                    out, err = trained.predict(c, narrative, taxonomy), None
+                except RuntimeError as exc:
+                    out, err = None, str(exc)
+            else:
+                out, err = classify_with_retry(variant, narrative, taxonomy, examples, pacer, budget, uses_llm)
             case = EvalCase(run_id=run.id, complaint_id=cid, repeat=rep, true_product=c.product, true_issue=c.issue)
             if err:
                 case.error = err
@@ -247,13 +280,14 @@ def main() -> None:
         if taken:
             raise SystemExit(f'A batch named "{name}" already exists. Use --resume "{name}" or a new --name.')
 
-    bad = [v for v in variants if v != "rules" and v not in PROMPT_VERSIONS]
+    known = {"rules", *PROMPT_VERSIONS, *TRAINED_VARIANTS}
+    bad = [v for v in variants if v not in known]
     if bad:
-        raise SystemExit(f"Unknown variant(s) {bad}. Choose from rules, {', '.join(PROMPT_VERSIONS)}")
+        raise SystemExit(f"Unknown variant(s) {bad}. Choose from {', '.join(sorted(known))}")
     if not ids:
         raise SystemExit("No test-split complaints with CFPB labels. Load data first (scripts.load_cfpb).")
 
-    llm_variants = [v for v in variants if v != "rules"]
+    llm_variants = [v for v in variants if v in PROMPT_VERSIONS]
     est = len(llm_variants) * (len(ids) + 2 * min(consistency, len(ids)))
     print(f'Batch "{name}": {len(ids)} complaints, variants {", ".join(variants)}.', file=sys.stderr)
     if est and args.rpm:

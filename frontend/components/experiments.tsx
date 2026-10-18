@@ -8,7 +8,7 @@ import { Button, Card, ErrorBox, Loading } from "./ui";
 
 const pct = (v?: number | null) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
 const num = (v?: number | null) => (v == null ? "—" : v.toLocaleString());
-const ORDER = ["rules", "v1", "v2", "v3", "v4"];
+const ORDER = ["rules", "tfidf", "embed", "v1", "v2", "v3", "v4"];
 
 function latestPerVariant(runs: EvalRunSummary[]): EvalRunSummary[] {
   const seen = new Map<string, EvalRunSummary>();

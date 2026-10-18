@@ -27,7 +27,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 @pytest.fixture(scope="module")
 def client():
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS audit_events, triage, policy_chunks, complaints CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS few_shot_examples, audit_events, triage, policy_chunks, complaints CASCADE"))
     init_db()
     run = lambda *a: subprocess.run([sys.executable, "-m", *a], cwd=BACKEND, check=True, capture_output=True)
     run("scripts.load_cfpb", "--csv", "tests/fixtures/synthetic_complaints.csv", "--test-frac", "1.0")
@@ -54,8 +54,10 @@ def test_batch_triage_routes_high_risk_to_compliance(client):
 def test_trace_and_citations(client):
     d = client.get("/api/complaints/900000001").json()
     agents = [s["agent"] for s in d["triage"]["trace"]]
-    assert agents == ["classify", "research", "route", "draft"]
+    assert agents == ["screen", "classify", "research", "route", "draft", "verify"]
     assert len(d["triage"]["citations"]) == 3
+    g = d["triage"]["grounding"]
+    assert g["method"].startswith("lexical") and 0 <= g["score"] <= 1
 
 
 def test_pii_redacted_before_llm(client):

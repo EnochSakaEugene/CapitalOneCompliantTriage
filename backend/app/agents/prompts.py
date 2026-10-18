@@ -15,11 +15,16 @@ v4  v2 plus disambiguation rules written from the v2 error analysis (debt collec
 
 The live pipeline uses settings.classifier_prompt_version; the evaluation runner
 can test any version side by side on the same complaints.
+
+Learning from corrections: when Compliance promotes analyst-corrected cases
+(FewShotExample), the LIVE pipeline appends them to v2/v4 prompts as "analyst
+corrections". The evaluation runner never adds them, and promoted complaints are
+excluded from evaluation samples, so measured accuracy stays comparable and leak-free.
 """
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Complaint
+from app.models import Complaint, FewShotExample
 from app.pii import redact
 
 PROMPT_VERSIONS = {
@@ -70,6 +75,18 @@ Labelled examples (real complaints, labels assigned by the CFPB):
 {examples}"""
 
 
+CORRECTIONS_BLOCK = """
+
+Analyst corrections (cases where the AI was wrong; the label shown is the analyst's correction):
+{examples}"""
+
+
+def promoted_examples(db: Session, limit: int = 6) -> list[dict]:
+    """Analyst corrections that Compliance promoted, newest first."""
+    rows = db.scalars(select(FewShotExample).order_by(FewShotExample.id.desc()).limit(limit)).all()
+    return [{"narrative": r.narrative, "product": r.product, "issue": r.issue} for r in rows]
+
+
 def taxonomy_text(taxonomy: dict[str, list[str]]) -> str:
     return "\n".join(f"* {p}\n" + "\n".join(f"    - {i}" for i in issues) for p, issues in taxonomy.items())
 
@@ -107,6 +124,11 @@ def classify_messages(version: str, narrative: str, taxonomy: dict[str, list[str
                 f'Complaint: "{e["narrative"]}"\n-> product: {e["product"]} | issue: {e["issue"]}' for e in examples
             )
             system += V3_EXAMPLES.format(examples=block)
+        elif version in ("v2", "v4") and examples:
+            block = "\n\n".join(
+                f'Complaint: "{e["narrative"]}"\n-> product: {e["product"]} | issue: {e["issue"]}' for e in examples
+            )
+            system += CORRECTIONS_BLOCK.format(examples=block)
     else:
         raise ValueError(f"Unknown prompt version {version!r}; choose from {sorted(PROMPT_VERSIONS)}")
     return [("system", system), ("user", narrative)]

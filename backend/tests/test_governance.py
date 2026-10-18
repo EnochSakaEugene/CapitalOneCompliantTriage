@@ -21,7 +21,7 @@ BACKEND = Path(__file__).resolve().parents[1]
 @pytest.fixture(scope="module")
 def client():
     with engine.begin() as conn:
-        conn.execute(text("DROP TABLE IF EXISTS audit_events, triage, policy_chunks, complaints, risk_register CASCADE"))
+        conn.execute(text("DROP TABLE IF EXISTS few_shot_examples, audit_events, triage, policy_chunks, complaints, risk_register CASCADE"))
     init_db()
     run = lambda *a: subprocess.run([sys.executable, "-m", *a], cwd=BACKEND, check=True, capture_output=True)
     run("scripts.load_cfpb", "--csv", "tests/fixtures/synthetic_complaints.csv", "--test-frac", "1.0")
@@ -52,7 +52,7 @@ def test_model_card_and_fairness(client):
 
 def test_risk_register_seed_edit_and_create(client):
     risks = client.get("/api/governance/risks").json()
-    assert len(risks) == 9
+    assert len(risks) == 14  # 9 original + 5 added (copyright, misuse, hallucination, language, data age)
     r = risks[0]
     upd = client.put(f"/api/governance/risks/{r['id']}", json={**r, "status": "monitoring", "owner": "Team lead"}).json()
     assert upd["status"] == "monitoring" and upd["owner"] == "Team lead"

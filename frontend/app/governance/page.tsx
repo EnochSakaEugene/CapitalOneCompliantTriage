@@ -14,7 +14,70 @@ const INDICATOR_LABELS: Record<string, string> = {
   approve_without_edit_rate: "Approved without edits",
   pii_redactions: "PII redactions",
   product_accuracy: "Product accuracy",
+  grounded_mean: "Draft groundedness",
+  injection_flags: "Injection flags",
 };
+
+function RedTeamPanel() {
+  const rt = useLive(() => api.redteam(), [], 0);
+  const [show, setShow] = useState(false);
+  const d = rt.data;
+  if (rt.error && !d) return <ErrorBox error={rt.error} />;
+  if (!d) return <Loading />;
+  return (
+    <>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-md bg-canvas p-3">
+          <div className="text-xs text-muted">Attacks caught</div>
+          <div className="text-2xl font-semibold tabular-nums text-navy-dark">{d.caught} / {d.attacks}</div>
+          <div className="text-xs text-muted">{pct(d.catch_rate)} catch rate on the red-team set</div>
+        </div>
+        <div className="rounded-md bg-canvas p-3">
+          <div className="text-xs text-muted">False alarms on tricky benign complaints</div>
+          <div className="text-2xl font-semibold tabular-nums text-navy-dark">{d.false_positives} / {d.benign}</div>
+          <div className="text-xs text-muted">e.g. &ldquo;they told me to ignore the late fee&rdquo;</div>
+        </div>
+        <div className="rounded-md bg-canvas p-3">
+          <div className="text-xs text-muted">Flagged among real CFPB complaints</div>
+          <div className="text-2xl font-semibold tabular-nums text-navy-dark">{d.real_flagged} / {d.real_checked}</div>
+          <div className="text-xs text-muted">{pct(d.real_flag_rate)} (assumed benign: a false-positive estimate)</div>
+        </div>
+      </div>
+      <p className="mt-3 text-sm text-gray-700">
+        Defence in depth: a rule-based screen runs before any AI call (it cannot itself be prompt-injected); flagged complaints go to
+        Compliance with no auto-draft; prompts treat complaint text as data; outputs are forced into fixed schemas; drafts are checked
+        for leaked instructions; and a person approves every reply. Misses are expected for polite paraphrases with no trigger words,
+        which is why the later layers exist.
+      </p>
+      <button onClick={() => setShow((v) => !v)} className="mt-2 text-sm text-navy hover:underline print:hidden">
+        {show ? "Hide test cases" : `Show all ${d.cases.length} test cases`}
+      </button>
+      {show && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[700px] text-left text-xs">
+            <thead className="uppercase tracking-wide text-muted">
+              <tr><th className="py-1 pr-2">ID</th><th className="pr-2">Type</th><th className="pr-2">Text</th><th className="pr-2">Expected</th><th className="pr-2">Result</th></tr>
+            </thead>
+            <tbody>
+              {d.cases.map((c) => (
+                <tr key={c.id} className="border-t border-line align-top">
+                  <td className="py-1.5 pr-2 font-medium">{c.id}</td>
+                  <td className="pr-2">{c.type}</td>
+                  <td className="pr-2 text-gray-700">{c.text}</td>
+                  <td className="pr-2">{c.attack ? "Flag" : "Allow"}</td>
+                  <td className={`pr-2 font-semibold ${c.correct ? "text-ok" : "text-alert"}`}>
+                    {c.detected ? "Flagged" : "Allowed"} {c.correct ? "✓" : "✗"}
+                    {c.rules.length > 0 && <div className="font-normal text-muted">{c.rules.join(", ")}</div>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
 
 function Stat({ label, value, note, tone = "text-navy-dark" }: { label: string; value: string | number; note?: string; tone?: string }) {
   return (
@@ -177,7 +240,7 @@ function AddRisk({ onSaved }: { onSaved: () => void }) {
     <div className="mt-3 grid gap-2 rounded border border-line bg-gray-50 p-3 md:grid-cols-6">
       <input value={risk} onChange={(e) => setRisk(e.target.value)} placeholder="Describe the risk" className="rounded border border-line px-2 py-1 text-sm md:col-span-4" />
       <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded border border-line px-2 py-1 text-sm md:col-span-2">
-        {["accuracy", "fairness", "privacy", "security", "oversight", "operational"].map((c) => <option key={c}>{c}</option>)}
+        {["accuracy", "fairness", "privacy", "security", "oversight", "operational", "legal", "misuse"].map((c) => <option key={c}>{c}</option>)}
       </select>
       <input value={mitigation} onChange={(e) => setMitigation(e.target.value)} placeholder="Mitigation (optional)" className="rounded border border-line px-2 py-1 text-sm md:col-span-6" />
       <div className="flex gap-2 md:col-span-6">
@@ -244,6 +307,10 @@ export default function GovernancePage() {
             groups can differ in the products and issues they complain about.
           </p>
         </div>
+      </div>
+
+      <div className="mb-4">
+        <Card title="Red team: prompt injection and misuse"><RedTeamPanel /></Card>
       </div>
 
       <Card title="AI risk register" right={<span className="text-xs text-muted">Sorted by likelihood × impact</span>}>

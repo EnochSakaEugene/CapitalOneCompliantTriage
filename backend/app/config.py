@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     # Copy them from your provider's pricing page; 0 means "not set".
     price_input_per_mtok_fast: float = 0.0
     price_output_per_mtok_fast: float = 0.0
+    price_input_per_mtok_strong: float = 0.0
+    price_output_per_mtok_strong: float = 0.0
 
     # Sessions: set AUTH_SECRET to a long random value in .env (tokens are signed with it).
     auth_secret: str = "dev-only-change-me-in-env"

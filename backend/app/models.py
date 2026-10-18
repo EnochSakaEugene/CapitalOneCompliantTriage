@@ -34,10 +34,14 @@ class Complaint(Base):
     submitted_via: Mapped[str | None] = mapped_column(String(50))
     tags: Mapped[str | None] = mapped_column(String(100))
     company_response: Mapped[str | None] = mapped_column(String(200))
-    split: Mapped[str] = mapped_column(String(10), default="test")  # train | test
+    split: Mapped[str] = mapped_column(String(10), default="test")  # train | test | live (new intake)
+    source: Mapped[str] = mapped_column(String(20), default="cfpb")  # cfpb | intake (typed into TriageIQ)
     status: Mapped[str] = mapped_column(String(30), default="new", index=True)
     # new -> awaiting_review | escalated -> approved | closed
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # Optional narrative embedding (scripts.embed_complaints): similar cases + embedding classifier.
+    embedding = mapped_column(EmbeddingType, nullable=True, deferred=True)
 
     triage: Mapped["Triage | None"] = relationship(back_populates="complaint", uselist=False)
 
@@ -66,10 +70,39 @@ class Triage(Base):
     final_reply: Mapped[str | None] = mapped_column(Text)
     reviewer: Mapped[str | None] = mapped_column(String(100))
     model_info: Mapped[dict] = mapped_column(JSON, default=dict)
+    # Safety and quality checks
+    grounding: Mapped[dict | None] = mapped_column(JSON)       # hallucination check of the draft
+    injection: Mapped[dict | None] = mapped_column(JSON)       # prompt-injection screen result
+    language: Mapped[str | None] = mapped_column(String(10))   # en | es | other
+    translation: Mapped[str | None] = mapped_column(Text)      # English translation if not English
+    # Human feedback (learning from corrections)
+    corrected_product: Mapped[str | None] = mapped_column(String(200))
+    corrected_issue: Mapped[str | None] = mapped_column(String(300))
+    corrected_by: Mapped[str | None] = mapped_column(String(100))
+    edit_ratio: Mapped[float | None] = mapped_column(Float)    # 0 = approved as drafted, 1 = rewritten
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # Operations
+    total_ms: Mapped[int | None] = mapped_column(Integer)
+    tokens_in: Mapped[int] = mapped_column(Integer, default=0)
+    tokens_out: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     complaint: Mapped[Complaint] = relationship(back_populates="triage")
+
+
+class FewShotExample(Base):
+    """An analyst-corrected case promoted by Compliance into the classifier's few-shot examples."""
+
+    __tablename__ = "few_shot_examples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    complaint_id: Mapped[int] = mapped_column(ForeignKey("complaints.id"), unique=True)
+    product: Mapped[str] = mapped_column(String(200))
+    issue: Mapped[str] = mapped_column(String(300))
+    narrative: Mapped[str] = mapped_column(Text)     # redacted, trimmed
+    promoted_by: Mapped[str] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class PolicyChunk(Base):
