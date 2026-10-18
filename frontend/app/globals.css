@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+/* TriageIQ palette: inspired by (not copied from) Capital One's navy and red.
+   Navy is the primary color; red is reserved for high-risk alerts only. */
+@theme {
+  --color-navy: #004879;
+  --color-navy-dark: #00304f;
+  --color-navy-light: #e6eef4;
+  --color-alert: #d03027;
+  --color-alert-light: #fbeaea;
+  --color-warn: #b45309;
+  --color-warn-light: #fef3c7;
+  --color-ok: #15803d;
+  --color-ok-light: #dcfce7;
+  --color-ink: #1f2937;
+  --color-muted: #6b7280;
+  --color-line: #e5e7eb;
+  --color-canvas: #f5f7fa;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}

@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+node_modules/
+.next/
+*.tsbuildinfo
+.DS_Store
+# Raw CFPB downloads are large; keep them out of git
+data/*.csv
+data/*.zip
