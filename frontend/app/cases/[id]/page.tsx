@@ -200,15 +200,18 @@ export default function CasePage() {
                 <textarea
                   value={reply}
                   onChange={(e) => setReply(e.target.value)}
-                  disabled={done}
+                  disabled={done || !can.review(role)}
                   rows={12}
                   className="w-full rounded-md border border-line p-3 text-sm outline-none focus:ring-2 focus:ring-navy/30 disabled:bg-gray-50 print:hidden"
                 />
                 <div className="hidden whitespace-pre-wrap rounded-md border border-line p-3 text-sm print:block">{reply}</div>
-                {!done && data.status === "escalated" && !can.close(role) && (
+                {!done && !can.review(role) && (
+                  <p className="mt-3 text-sm text-muted">View only: your role can read this case but only Analysts and Compliance can act on it.</p>
+                )}
+                {!done && can.review(role) && data.status === "escalated" && !can.close(role) && (
                   <p className="mt-3 text-sm text-muted">Escalated to Compliance. Only a Compliance Officer can close this case.</p>
                 )}
-                {!done && (data.status !== "escalated" || can.close(role)) && (
+                {!done && can.review(role) && (data.status !== "escalated" || can.close(role)) && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
                     {data.status !== "escalated" ? (
                       <>

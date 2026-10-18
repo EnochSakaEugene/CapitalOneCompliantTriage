@@ -11,9 +11,10 @@ from app.config import get_settings
 from app.db import get_db
 from app.llm import model_name
 from app.models import AuditEvent, Complaint, PolicyChunk, RiskItem, Triage, User
-from app.security import require_roles
+from app.security import current_user, require_roles
 
-router = APIRouter(prefix="/governance", dependencies=[Depends(require_roles("compliance", "cx_leader"))])
+# Every signed-in role can view governance; only Compliance (and Admin) can change the risk register.
+router = APIRouter(prefix="/governance", dependencies=[Depends(current_user)])
 settings = get_settings()
 LEVELS = {"low", "medium", "high"}
 STATUSES = {"open", "monitoring", "mitigated"}

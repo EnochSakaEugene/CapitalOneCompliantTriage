@@ -57,14 +57,29 @@ when the password changes. Five failed attempts lock an account for 15 minutes. 
 logout and password change is recorded in the audit log, and approvals/escalations are recorded
 under the logged-in user (the client can no longer choose the reviewer name).
 
+Every signed-in role sees every menu and page (shared visibility); roles differ in what they
+can **do**, and the back end enforces this on every request. The landing page shows the same matrix.
+
+| Capability | Analyst | Compliance | CX Leader | Admin |
+|---|:-:|:-:|:-:|:-:|
+| View every page (queue, cases, insights, evaluation, knowledge base, governance, audit log) | ✓ | ✓ | ✓ | ✓ |
+| Download evaluation results and reports | ✓ | ✓ | ✓ | ✓ |
+| Run AI triage on incoming complaints | ✓ | ✓ | – | ✓ |
+| Edit and approve AI-drafted replies | ✓ | ✓ | – | ✓ |
+| Escalate a case to Compliance | ✓ | ✓ | – | ✓ |
+| Close escalated cases | – | ✓ | – | ✓ |
+| Edit the regulation knowledge base and re-index it | – | ✓ | – | ✓ |
+| Add and update risks in the risk register | – | ✓ | – | ✓ |
+| Change own password | ✓ | ✓ | ✓ | ✓ |
+
 Demo accounts are created automatically on first start (DEMO ONLY: change passwords after login):
 
-| Role | Email | Password | Can |
-|---|---|---|---|
-| Complaint Analyst | analyst@triageiq.demo | Analyst#2026 | Triage, approve, escalate |
-| Compliance Officer | compliance@triageiq.demo | Comply#2026 | All analyst actions + close escalations, audit log, edit policies and risks |
-| CX Leader | cx@triageiq.demo | Insight#2026 | Insights, evaluation, knowledge base (view), governance (view) |
-| Administrator | admin@triageiq.demo | Admin#Triage26 | Everything |
+| Role | Email | Password |
+|---|---|---|
+| Complaint Analyst | analyst@triageiq.demo | Analyst#2026 |
+| Compliance Officer | compliance@triageiq.demo | Comply#2026 |
+| CX Leader | cx@triageiq.demo | Insight#2026 |
+| Administrator | admin@triageiq.demo | Admin#Triage26 |
 
 Reset demo passwords: `docker compose exec backend python -m scripts.seed_users --reset`.
 Set `AUTH_SECRET` in `.env` to a long random value (e.g. `openssl rand -hex 32`).
@@ -131,5 +146,5 @@ frontend/
 - [ ] Fine-tuned small classifier, compared against few-shot on the Evaluation page
 - [ ] RAG faithfulness scoring for drafts (LLM-as-judge plus human rating)
 - [ ] Bias checks across states and tags (e.g. Servicemember, Older American)
-- [ ] Real authentication for the three roles
+- [x] Role-based authentication (4 roles, enforced in the API)
 - [ ] Deploy: Vercel (frontend), Render or Railway (backend + Postgres)

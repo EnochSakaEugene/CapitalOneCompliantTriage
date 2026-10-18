@@ -64,8 +64,10 @@ def test_roles_are_enforced(client):
     analyst = login(client, "analyst@triageiq.demo", "Analyst#2026").json()["token"]
     compliance = login(client, "compliance@triageiq.demo", "Comply#2026").json()["token"]
     assert client.get("/api/governance", headers=auth(cx)).status_code == 200
-    assert client.get("/api/governance", headers=auth(analyst)).status_code == 403
-    assert client.get("/api/audit", headers=auth(analyst)).status_code == 403
+    # Every role can view governance and the audit log; changes stay restricted.
+    assert client.get("/api/governance", headers=auth(analyst)).status_code == 200
+    assert client.get("/api/audit", headers=auth(cx)).status_code == 200
+    assert client.post("/api/governance/risks", json={"title": "x"}, headers=auth(cx)).status_code == 403
     assert client.get("/api/audit", headers=auth(compliance)).status_code == 200
     assert client.post("/api/triage-batch?limit=1", headers=auth(cx)).status_code == 403
     assert client.post("/api/policies/reindex", headers=auth(analyst)).status_code == 403

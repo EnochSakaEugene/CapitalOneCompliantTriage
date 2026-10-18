@@ -31,3 +31,14 @@ body {
   section { box-shadow: none !important; }
   h2 { break-after: avoid; }
 }
+
+/* Landing slider motion: data flowing along dashed paths, gentle float and pulse. */
+@keyframes tiq-flow { to { stroke-dashoffset: -24; } }
+@keyframes tiq-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes tiq-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.6; } }
+.tiq-flow { animation: tiq-flow 1.4s linear infinite; }
+.tiq-float { animation: tiq-float 5s ease-in-out infinite; transform-box: fill-box; }
+.tiq-pulse { animation: tiq-pulse 3s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .tiq-flow, .tiq-float, .tiq-pulse { animation: none; }
+}

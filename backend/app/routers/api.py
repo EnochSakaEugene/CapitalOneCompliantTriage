@@ -186,8 +186,8 @@ def evaluation(db: Session = Depends(get_db)):
 
 
 @router.get("/audit")
-def audit(limit: int = Query(100, le=1000), db: Session = Depends(get_db),
-          _: User = Depends(require_roles("compliance"))):
+def audit(limit: int = Query(100, le=1000), db: Session = Depends(get_db)):
+    # Read-only for every signed-in role (transparency); nothing here can be changed.
     events = db.scalars(select(AuditEvent).order_by(AuditEvent.id.desc()).limit(limit)).all()
     return [audit_dict(e) for e in events]
 
