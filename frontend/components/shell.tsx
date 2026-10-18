@@ -17,12 +17,12 @@ export function Shell({ children }: { children: ReactNode }) {
   const { role, setRole } = useRole();
   return (
     <div className="flex min-h-screen flex-col">
-      <header className="flex items-center justify-between bg-navy px-6 py-3 text-white">
+      <header className="flex items-center justify-between bg-navy px-6 py-3 text-white print:bg-white print:px-0 print:text-navy">
         <Link href="/queue" className="flex items-baseline gap-2">
           <span className="text-lg font-bold tracking-tight">TriageIQ</span>
           <span className="text-xs text-white/70">Complaint triage assistant</span>
         </Link>
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm print:hidden">
           <span className="text-white/70">Viewing as</span>
           <select
             value={role}
@@ -38,7 +38,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </label>
       </header>
       <div className="flex flex-1">
-        <nav className="w-52 shrink-0 border-r border-line bg-white px-3 py-5">
+        <nav className="w-52 shrink-0 border-r border-line bg-white px-3 py-5 print:hidden">
           {NAV.map((n) => {
             const active = path.startsWith(n.href) || (n.href === "/queue" && path.startsWith("/cases"));
             return (
@@ -54,7 +54,7 @@ export function Shell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <main className="min-w-0 flex-1 px-8 py-6">{children}</main>
+        <main className="min-w-0 flex-1 px-8 py-6 print:px-0">{children}</main>
       </div>
       <footer className="border-t border-line bg-white px-6 py-3 text-xs text-muted">
         Student prototype for GWU ISTM 6227. Not affiliated with or endorsed by Capital One. Uses public CFPB

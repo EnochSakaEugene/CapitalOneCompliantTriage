@@ -79,10 +79,14 @@ def _pick_product(text: str, allowed: list[str]) -> tuple[str, str, float]:
     return product, "credit card", 0.3
 
 
-def classify(narrative: str, allowed_products: list[str]) -> dict:
+def classify(narrative: str, taxonomy: dict[str, list[str]]) -> dict:
+    """taxonomy: product -> CFPB issues (most common first), from the loaded data."""
     from app.agents.schemas import HIGH_RISK_FLAGS
 
-    product, key, confidence = _pick_product(narrative, allowed_products)
+    product, key, confidence = _pick_product(narrative, list(taxonomy))
+    issues = taxonomy.get(product, [])
+    guess = ISSUE_BY_PRODUCT.get(key, "Other")
+    issue = guess if guess in issues or not issues else issues[0]
     flags = [f for f, pat in FLAG_PATTERNS.items() if pat.search(narrative)]
     if set(flags) & HIGH_RISK_FLAGS:
         level = "high"
@@ -94,7 +98,7 @@ def classify(narrative: str, allowed_products: list[str]) -> dict:
     angry = sum(t.count(w) for w in ["!!", "unacceptable", "ridiculous", "furious", "worst"])
     return {
         "product": product,
-        "issue": ISSUE_BY_PRODUCT.get(key, "Other"),
+        "issue": issue,
         "sentiment": "negative" if angry or flags else "neutral",
         "urgency": level,
         "risk_flags": flags,

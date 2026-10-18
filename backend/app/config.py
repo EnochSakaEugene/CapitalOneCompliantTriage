@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     gemini_model_fast: str = "gemini-3.5-flash-lite"   # classification
     gemini_model_strong: str = "gemini-3.8-flash"      # response drafting
     gemini_embedding_model: str = "gemini-embedding-001"
+    # How long Gemini "thinks" before answering: minimal | low | medium | high, or empty
+    # for the model default. "low" keeps drafting fast (the default took ~40s per draft).
+    gemini_reasoning_effort: str = "low"
+    gemini_max_output_tokens: int = 2048  # includes thinking tokens
 
     # OpenAI
     openai_api_key: str = ""

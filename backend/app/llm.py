@@ -14,14 +14,18 @@ from app.config import get_settings
 settings = get_settings()
 
 
-def get_chat(strong: bool = False):
+def get_chat(strong: bool = False, effort: bool = True):
     if settings.provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
+        use = effort and settings.gemini_reasoning_effort
+        extra = {"reasoning_effort": settings.gemini_reasoning_effort} if use else {}
         return ChatGoogleGenerativeAI(
             model=settings.gemini_model_strong if strong else settings.gemini_model_fast,
             google_api_key=settings.google_api_key,
             temperature=0.2 if strong else 0,
+            max_output_tokens=settings.gemini_max_output_tokens,
+            **extra,
         )
     from langchain_openai import ChatOpenAI
 
@@ -30,6 +34,15 @@ def get_chat(strong: bool = False):
         api_key=settings.openai_api_key,
         temperature=0.2 if strong else 0,
     )
+
+
+def structured(schema, strong: bool = False):
+    """Chat model that returns `schema`. On Gemini, if the model rejects the
+    reasoning-effort setting, retry once with the model's default thinking."""
+    runnable = get_chat(strong).with_structured_output(schema)
+    if settings.provider == "gemini" and settings.gemini_reasoning_effort:
+        runnable = runnable.with_fallbacks([get_chat(strong, effort=False).with_structured_output(schema)])
+    return runnable
 
 
 def model_name(strong: bool = False) -> str:

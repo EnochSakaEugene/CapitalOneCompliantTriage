@@ -18,8 +18,8 @@ HIGH_RISK_FLAGS = {"fraud_or_unauthorized", "identity_theft", "discrimination", 
 
 
 class Classification(BaseModel):
-    product: str = Field(description="One product from the allowed list, copied exactly")
-    issue: str = Field(description="Short CFPB-style issue label, e.g. 'Problem with a purchase shown on your statement'")
+    product: str = Field(description="One product from the taxonomy, copied exactly")
+    issue: str = Field(description="One issue listed under the chosen product, copied exactly")
     sentiment: Literal["negative", "neutral", "positive"]
     urgency: Literal["low", "medium", "high"]
     risk_flags: list[RiskFlag] = Field(default_factory=list)
@@ -37,7 +37,7 @@ class TriageState(TypedDict, total=False):
     complaint_id: int
     narrative: str            # PII-redacted narrative
     date_received: str | None
-    allowed_products: list[str]
+    taxonomy: dict[str, list[str]]   # product -> CFPB issues
     classification: dict
     citations: list[dict]
     prior_similar: int

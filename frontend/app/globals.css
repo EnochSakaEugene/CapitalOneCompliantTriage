@@ -23,3 +23,11 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
 }
+
+/* Printing (Cmd+P): full-width single column, white background, reply shown as plain text. */
+@media print {
+  @page { margin: 14mm; }
+  body { background: white; }
+  section { box-shadow: none !important; }
+  h2 { break-after: avoid; }
+}

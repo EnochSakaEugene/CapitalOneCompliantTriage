@@ -26,9 +26,14 @@ function Trace({ steps }: { steps: TraceStep[] }) {
             <span className="text-sm font-semibold">{AGENT_LABELS[s.agent] ?? s.agent}</span>
             <span className="text-xs tabular-nums text-muted">{s.ms} ms</span>
           </div>
-          <pre className="mt-1 whitespace-pre-wrap break-words rounded bg-gray-50 p-2 text-[11px] text-gray-700">
-            {JSON.stringify(s.output, null, 1)}
-          </pre>
+          <dl className="mt-1 space-y-0.5 rounded bg-gray-50 p-2 text-[11px] text-gray-700">
+            {Object.entries(s.output).map(([k, v]) => (
+              <div key={k} className="flex gap-2">
+                <dt className="shrink-0 text-muted">{k.replaceAll("_", " ")}</dt>
+                <dd className="min-w-0 break-words">{Array.isArray(v) ? v.join(" · ") || "none" : String(v)}</dd>
+              </div>
+            ))}
+          </dl>
         </li>
       ))}
     </ol>
@@ -75,7 +80,7 @@ export default function CasePage() {
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/queue" className="text-sm text-navy hover:underline">
+          <Link href="/queue" className="text-sm text-navy hover:underline print:hidden">
             ← Back to queue
           </Link>
           <h1 className="mt-1 flex items-center gap-3 text-2xl font-semibold text-navy-dark">
@@ -104,13 +109,13 @@ export default function CasePage() {
         </Card>
       ) : (
         <>
-          <div className="grid gap-4 lg:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-3 print:grid-cols-1">
             <Card title="Complaint">
               <p className="mb-3 rounded bg-navy-light p-3 text-sm text-navy-dark">
                 <span className="font-semibold">AI summary: </span>
                 {t.summary}
               </p>
-              <p className="max-h-80 overflow-y-auto whitespace-pre-wrap text-sm text-gray-700">{data.narrative}</p>
+              <p className="max-h-80 overflow-y-auto whitespace-pre-wrap text-sm text-gray-700 print:max-h-none print:overflow-visible">{data.narrative}</p>
               <p className="mt-3 text-xs text-muted">
                 Received {data.date_received ?? "—"} · {data.submitted_via ?? "—"} · {data.state ?? "—"}
                 {data.tags ? ` · ${data.tags}` : ""}
@@ -178,8 +183,8 @@ export default function CasePage() {
             </Card>
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
-            <div className="lg:col-span-2">
+          <div className="mt-4 grid gap-4 xl:grid-cols-3 print:grid-cols-1">
+            <div className="xl:col-span-2 print:col-span-1">
               <Card
                 title={t.route === "compliance" ? "Compliance review" : "Draft reply (requires approval)"}
                 right={<span className="text-xs text-muted">Reviewer: {role}</span>}
@@ -194,10 +199,11 @@ export default function CasePage() {
                   onChange={(e) => setReply(e.target.value)}
                   disabled={done}
                   rows={12}
-                  className="w-full rounded-md border border-line p-3 text-sm outline-none focus:ring-2 focus:ring-navy/30 disabled:bg-gray-50"
+                  className="w-full rounded-md border border-line p-3 text-sm outline-none focus:ring-2 focus:ring-navy/30 disabled:bg-gray-50 print:hidden"
                 />
+                <div className="hidden whitespace-pre-wrap rounded-md border border-line p-3 text-sm print:block">{reply}</div>
                 {!done && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
                     {data.status !== "escalated" ? (
                       <>
                         <Button onClick={() => act(() => api.approve(data.id, role, reply))} disabled={busy || !reply}>
