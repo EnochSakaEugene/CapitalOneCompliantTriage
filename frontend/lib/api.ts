@@ -94,6 +94,64 @@ export interface PolicyDetail {
   sections: { title: string; text: string; cited: number }[];
 }
 
+export interface FairnessRow {
+  group: string;
+  n: number;
+  high_risk_rate: number | null;
+  escalation_rate: number | null;
+  product_accuracy: number | null;
+  avg_confidence: number;
+  small_sample: boolean;
+}
+
+export interface Governance {
+  oversight: {
+    triaged: number;
+    ai_escalated: number;
+    approved: number;
+    approved_with_edits: number;
+    human_escalations: number;
+    overrides: number;
+    closed: number;
+    reviewed: number;
+    edit_rate: number | null;
+    approve_without_edit_rate: number | null;
+    override_rate: number | null;
+    pii_redactions: number;
+    policy_changes: number;
+  };
+  model_card: {
+    provider: string;
+    classification_model: string;
+    drafting_model: string;
+    embedding_model: string;
+    reasoning_effort: string | null;
+    policy_sections: number;
+    data_window: [string | null, string | null];
+    complaints_loaded: number;
+    evaluation: { n: number; product_accuracy: number | null; issue_accuracy: number | null };
+    intended_use: string;
+    out_of_scope: string;
+    limitations: string[];
+  };
+  fairness: { min_group: number; by_tag: FairnessRow[]; by_state: FairnessRow[] };
+  indicators: Record<string, number | null>;
+}
+
+export type Level = "low" | "medium" | "high";
+export interface RiskItem {
+  id: number;
+  risk: string;
+  category: string;
+  likelihood: Level;
+  impact: Level;
+  mitigation: string;
+  indicator: string | null;
+  owner: string;
+  status: "open" | "monitoring" | "mitigated";
+  updated_at: string | null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}/api${path}`, {
     ...init,
@@ -156,4 +214,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ query, k }),
     }),
+  governance: () => request<Governance>("/governance"),
+  risks: () => request<RiskItem[]>("/governance/risks"),
+  saveRisk: (r: Omit<RiskItem, "updated_at" | "indicator"> & { reviewer: string }) =>
+    request<RiskItem>(`/governance/risks/${r.id}`, { method: "PUT", body: JSON.stringify(r) }),
+  createRisk: (r: Partial<RiskItem> & { risk: string; category: string; reviewer: string }) =>
+    request<RiskItem>("/governance/risks", { method: "POST", body: JSON.stringify(r) }),
 };

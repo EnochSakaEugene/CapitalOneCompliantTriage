@@ -96,3 +96,20 @@ class AuditEvent(Base):
     action: Mapped[str] = mapped_column(String(100))
     detail: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+
+class RiskItem(Base):
+    """One row of the AI risk register shown on the Governance page."""
+
+    __tablename__ = "risk_register"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    risk: Mapped[str] = mapped_column(String(300))
+    category: Mapped[str] = mapped_column(String(50))        # accuracy | fairness | privacy | security | oversight | operational
+    likelihood: Mapped[str] = mapped_column(String(10))      # low | medium | high
+    impact: Mapped[str] = mapped_column(String(10))          # low | medium | high
+    mitigation: Mapped[str] = mapped_column(Text)
+    indicator: Mapped[str | None] = mapped_column(String(50))  # key of a live metric, if any
+    owner: Mapped[str] = mapped_column(String(100), default="Unassigned")
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open | monitoring | mitigated
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
