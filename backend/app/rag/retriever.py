@@ -60,7 +60,7 @@ def ingest_policies(db: Session) -> int:
 def retrieve(db: Session, query: str, k: int | None = None) -> list[dict]:
     """Return the top-k most similar policy chunks with cosine similarity scores."""
     k = k or settings.rag_top_k
-    qvec = embed([query])[0]
+    qvec = embed([query], kind="query")[0]
     if settings.is_postgres:
         dist = PolicyChunk.embedding.cosine_distance(qvec)
         rows = db.execute(select(PolicyChunk, dist.label("d")).order_by(dist).limit(k)).all()

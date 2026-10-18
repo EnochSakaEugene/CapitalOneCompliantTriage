@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 os.environ["OPENAI_API_KEY"] = ""  # force mock mode
+os.environ["GOOGLE_API_KEY"] = ""
+os.environ["LLM_PROVIDER"] = "auto"
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402

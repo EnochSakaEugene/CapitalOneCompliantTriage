@@ -39,10 +39,10 @@ against.
 cp .env.example .env            # add your OpenAI key, or leave empty for mock mode
 docker compose up --build -d    # starts db, backend (8000) and frontend (3000)
 
-# Load data (run once). Option A downloads from the CFPB API:
+# Load data (run once). Option A downloads CFPB narrative archive files (Jan-Jul 2026):
 docker compose exec backend python -m scripts.load_cfpb --download --limit 8000
-# Option B uses a CSV you downloaded from consumerfinance.gov into ./data:
-docker compose exec backend python -m scripts.load_cfpb --csv /data/complaints.csv --limit 8000
+# Option B uses archive .zip files you downloaded into ./data:
+docker compose exec backend python -m scripts.load_cfpb --csv /data/CCDB_Export_20_July_2026.zip --limit 8000
 
 docker compose exec backend python -m scripts.ingest_policies
 ```
@@ -74,6 +74,12 @@ Tests use `backend/tests/fixtures/synthetic_complaints.csv`, a set of **syntheti
 records, never real CFPB data.
 
 ## Data notes
+
+- **Narratives come from the CFPB archive, not the live API.** On August 14, 2026 the CFPB
+  stopped publishing complaint narratives; the live search API and CSV export no longer
+  include them. Narratives published from Dec 2011 to Aug 14, 2026 are in the
+  [Consumer Complaint Database Narratives Archive](https://www.consumerfinance.gov/foia-requests/foia-electronic-reading-room/cfpb-consumer-complaint-database-narratives-archive/)
+  (zip files by month or date range). Pass more files with repeated `--archive-url` or `--csv`.
 
 - Only complaints whose company contains "CAPITAL ONE" and that have a consumer narrative
   are loaded. 20% are marked `test`: they act as the incoming queue and the held-out

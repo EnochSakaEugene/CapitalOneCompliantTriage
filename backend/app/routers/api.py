@@ -7,6 +7,7 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.agents.graph import run_triage
+from app.llm import model_name
 from app.audit import log_event
 from app.config import get_settings
 from app.db import get_db
@@ -35,6 +36,8 @@ def health(db: Session = Depends(get_db)):
     return {
         "status": "ok",
         "mock_llm": settings.mock_llm,
+        "provider": settings.provider,
+        "models": {"fast": model_name(), "strong": model_name(True)},
         "complaints": db.scalar(select(func.count()).select_from(Complaint)),
         "policy_chunks": db.scalar(select(func.count()).select_from(PolicyChunk)),
     }
@@ -169,7 +172,7 @@ def evaluation(db: Session = Depends(get_db)):
         d["correct"] += int(actual == pred)
     return {
         "n": n,
-        "model": "mock-rules" if settings.mock_llm else settings.llm_model_fast,
+        "model": model_name(),
         "product_accuracy": round(prod_ok / n, 3),
         "issue_accuracy": round(issue_ok / n, 3),
         "per_product": per_product,

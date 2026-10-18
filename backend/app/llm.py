@@ -1,7 +1,9 @@
-"""LLM and embedding access.
+"""LLM and embedding access for Gemini, OpenAI, or mock mode.
 
-Real mode: OpenAI via LangChain. Mock mode (no OPENAI_API_KEY): a deterministic
-hashed bag-of-words embedding, and agents fall back to rule-based logic.
+Gemini and OpenAI are both used through LangChain, so the agents call the same
+interface (`get_chat().with_structured_output(...)`) whichever provider is set.
+Mock mode (no API key): a hashed bag-of-words embedding, and the agents fall
+back to rule-based logic.
 """
 import hashlib
 import math
@@ -13,6 +15,14 @@ settings = get_settings()
 
 
 def get_chat(strong: bool = False):
+    if settings.provider == "gemini":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return ChatGoogleGenerativeAI(
+            model=settings.gemini_model_strong if strong else settings.gemini_model_fast,
+            google_api_key=settings.google_api_key,
+            temperature=0.2 if strong else 0,
+        )
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(
@@ -23,9 +33,11 @@ def get_chat(strong: bool = False):
 
 
 def model_name(strong: bool = False) -> str:
-    if settings.mock_llm:
-        return "mock-rules"
-    return settings.llm_model_strong if strong else settings.llm_model_fast
+    if settings.provider == "gemini":
+        return settings.gemini_model_strong if strong else settings.gemini_model_fast
+    if settings.provider == "openai":
+        return settings.llm_model_strong if strong else settings.llm_model_fast
+    return "mock-rules"
 
 
 _TOKEN = re.compile(r"[a-z]{3,}")
@@ -40,10 +52,31 @@ def _mock_embed(text: str) -> list[float]:
     return [v / norm for v in vec]
 
 
-def embed(texts: list[str]) -> list[list[float]]:
-    if settings.mock_llm:
-        return [_mock_embed(t) for t in texts]
-    from langchain_openai import OpenAIEmbeddings
+def _normalize(vec: list[float]) -> list[float]:
+    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+    return [v / norm for v in vec]
 
-    client = OpenAIEmbeddings(model=settings.embedding_model, api_key=settings.openai_api_key)
-    return client.embed_documents(texts)
+
+def embed(texts: list[str], kind: str = "document") -> list[list[float]]:
+    """Embed texts. kind is "document" (policy chunks) or "query" (search text)."""
+    if settings.provider == "gemini":
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+        client = GoogleGenerativeAIEmbeddings(
+            model=settings.gemini_embedding_model, google_api_key=settings.google_api_key
+        )
+        vectors = client.embed_documents(
+            texts,
+            task_type="RETRIEVAL_QUERY" if kind == "query" else "RETRIEVAL_DOCUMENT",
+            output_dimensionality=settings.embedding_dim,
+        )
+        # Truncated (non-3072) Gemini embeddings should be re-normalized for cosine search.
+        return [_normalize(list(v)) for v in vectors]
+    if settings.provider == "openai":
+        from langchain_openai import OpenAIEmbeddings
+
+        client = OpenAIEmbeddings(
+            model=settings.embedding_model, api_key=settings.openai_api_key, dimensions=settings.embedding_dim
+        )
+        return client.embed_documents(texts)
+    return [_mock_embed(t) for t in texts]

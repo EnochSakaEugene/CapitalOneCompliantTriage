@@ -59,7 +59,7 @@ export default function QueuePage() {
       />
       {mock && (
         <div className="mb-4 rounded-md border border-warn/40 bg-warn-light px-3 py-2 text-sm text-warn">
-          Mock mode: no OpenAI key is set, so rule-based logic stands in for the LLM.
+          Mock mode: no Gemini or OpenAI key is set, so rule-based logic stands in for the LLM.
         </div>
       )}
       <Card
