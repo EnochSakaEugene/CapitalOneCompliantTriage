@@ -1,5 +1,6 @@
 "use client";
-// App frame. Signed out: logo + "Log in" only (no menus). Signed in: role-filtered menus + Profile.
+// App frame. Signed out: logo + "Log in" only (no menus).
+// Signed in: role-filtered menus in the top navigation bar + Profile on the right.
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, type ReactNode } from "react";
@@ -7,6 +8,10 @@ import { canOpen, navFor } from "@/lib/access";
 import { useAuth } from "@/lib/auth";
 import { LoginMenu, ProfileMenu } from "./account";
 import { Logo } from "./brand";
+
+function isActive(path: string, href: string) {
+  return path.startsWith(href) || (href === "/queue" && path.startsWith("/cases"));
+}
 
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
@@ -19,12 +24,44 @@ export function Shell({ children }: { children: ReactNode }) {
     if (ready && !user && !isLanding) router.replace("/");
   }, [ready, user, isLanding, router]);
 
+  const nav = ready && user ? navFor(user.role) : [];
+
+  const links = (cls: string) =>
+    nav.map((n) => {
+      const active = isActive(path, n.href);
+      return (
+        <Link
+          key={n.href}
+          href={n.href}
+          aria-current={active ? "page" : undefined}
+          className={`${cls} whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors ${
+            active ? "bg-white/15 font-semibold text-white shadow-[inset_0_-2px_0_#d03027]" : "text-white/80 hover:bg-white/10 hover:text-white"
+          }`}
+        >
+          {n.label}
+        </Link>
+      );
+    });
+
   const header = (
-    <header className="flex items-center justify-between bg-navy px-6 py-3 text-white print:bg-white print:px-0 print:text-navy">
-      <Link href="/" aria-label="TriageIQ home">
-        <Logo light />
-      </Link>
-      <div className="print:hidden">{ready && (user ? <ProfileMenu /> : <LoginMenu />)}</div>
+    <header className="bg-navy text-white print:bg-white print:text-navy">
+      <div className="flex items-center gap-6 px-6 py-2.5 print:px-0">
+        <Link href="/" aria-label="TriageIQ home" className="shrink-0">
+          <Logo light />
+        </Link>
+        {nav.length > 0 && (
+          <nav aria-label="Main" className="hidden min-w-0 flex-1 items-center gap-1 lg:flex print:hidden">
+            {links("")}
+          </nav>
+        )}
+        <div className="ml-auto shrink-0 print:hidden">{ready && (user ? <ProfileMenu /> : <LoginMenu />)}</div>
+      </div>
+      {nav.length > 0 && (
+        // Narrow screens: the same menus on a second, horizontally scrollable row of the bar.
+        <nav aria-label="Main (compact)" className="flex gap-1 overflow-x-auto border-t border-white/10 px-4 py-1.5 lg:hidden print:hidden">
+          {links("shrink-0")}
+        </nav>
+      )}
     </header>
   );
 
@@ -49,46 +86,22 @@ export function Shell({ children }: { children: ReactNode }) {
     );
   }
 
-  const nav = navFor(user.role);
   const allowed = canOpen(path, user.role);
   return (
     <div className="flex min-h-screen flex-col">
       {header}
-      <div className="flex flex-1">
-        <nav className="w-52 shrink-0 border-r border-line bg-white px-3 py-5 print:hidden" aria-label="Main">
-          {nav.map((n) => {
-            const active = path.startsWith(n.href) || (n.href === "/queue" && path.startsWith("/cases"));
-            return (
-              <Link
-                key={n.href}
-                href={n.href}
-                className={`mb-1 block rounded-md px-3 py-2 text-sm ${
-                  active ? "bg-navy-light font-semibold text-navy" : "text-ink hover:bg-gray-50"
-                }`}
-              >
-                {n.label}
-              </Link>
-            );
-          })}
-          <div className="mt-6 border-t border-line px-3 pt-3 text-xs text-muted">
-            Signed in as
-            <div className="font-medium text-ink">{user.full_name}</div>
-            <div>{user.role_label}</div>
+      <main className="mx-auto w-full min-w-0 max-w-7xl flex-1 px-6 py-6 md:px-8 print:px-0">
+        {allowed ? (
+          children
+        ) : (
+          <div className="rounded-lg border border-line bg-white p-6">
+            <h1 className="text-lg font-semibold text-navy-dark">You don&apos;t have access to this page</h1>
+            <p className="mt-1 text-sm text-muted">
+              Your role ({user.role_label}) can&apos;t open this section. Pick a page from the menu, or ask an administrator.
+            </p>
           </div>
-        </nav>
-        <main className="min-w-0 flex-1 px-8 py-6 print:px-0">
-          {allowed ? (
-            children
-          ) : (
-            <div className="rounded-lg border border-line bg-white p-6">
-              <h1 className="text-lg font-semibold text-navy-dark">You don&apos;t have access to this page</h1>
-              <p className="mt-1 text-sm text-muted">
-                Your role ({user.role_label}) can&apos;t open this section. Pick a page from the menu, or ask an administrator.
-              </p>
-            </div>
-          )}
-        </main>
-      </div>
+        )}
+      </main>
       {footer}
     </div>
   );

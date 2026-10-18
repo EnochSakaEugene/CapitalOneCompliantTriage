@@ -5,7 +5,7 @@ import { AuthProvider } from "@/lib/auth";
 import { Shell } from "@/components/shell";
 
 export const metadata: Metadata = {
-  title: "TriageIQ",
+  title: "TriageIQ · Capital One case study",
   description: "Agentic complaint triage prototype (GWU ISTM 6227)",
 };
 
