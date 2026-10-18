@@ -5,6 +5,7 @@ import { useRole } from "@/components/role";
 import { Button, Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
 import { api, type FairnessRow, type Level, type RiskItem } from "@/lib/api";
 import { useLive } from "@/lib/useLive";
+import { can } from "@/lib/access";
 
 const pct = (v: number | null | undefined) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
 
@@ -146,7 +147,7 @@ function RiskRow({ item, indicators, onSaved }: { item: RiskItem; indicators: Re
         <div className="text-muted">{item.owner}</div>
       </td>
       <td className="py-2 text-right print:hidden">
-        <Button variant="secondary" onClick={() => setEdit(true)}>Edit</Button>
+        {can.editRisks(role) && <Button variant="secondary" onClick={() => setEdit(true)}>Edit</Button>}
       </td>
     </tr>
   );
@@ -188,6 +189,7 @@ function AddRisk({ onSaved }: { onSaved: () => void }) {
 }
 
 export default function GovernancePage() {
+  const { role: myRole } = useRole();
   const gov = useLive(() => api.governance());
   const risks = useLive(() => api.risks(), [], 60000);
   const g = gov.data;
@@ -272,7 +274,7 @@ export default function GovernancePage() {
           </div>
         )}
         <div className="mt-3 print:hidden">
-          <AddRisk onSaved={risks.refresh} />
+          {can.editRisks(myRole) && <AddRisk onSaved={risks.refresh} />}
         </div>
       </Card>
     </>

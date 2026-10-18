@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.audit import log_event
 from app.db import get_db
-from app.models import PolicyChunk, Triage
+from app.models import PolicyChunk, Triage, User
+from app.security import current_user, require_roles
 from app.rag.retriever import POLICY_DIR, ingest_policies, parse_text, retrieve, split_front_matter
 
-router = APIRouter(prefix="/policies")
+router = APIRouter(prefix="/policies", dependencies=[Depends(current_user)])
 FILE_RE = re.compile(r"^[a-z0-9][a-z0-9_\-]{0,80}\.md$")
 
 
@@ -20,7 +21,6 @@ class PolicyIn(BaseModel):
     title: str = Field(min_length=3, max_length=200)
     url: str | None = Field(default=None, max_length=500)
     body: str = Field(min_length=20, max_length=50_000)
-    reviewer: str = "analyst"
 
 
 class NewPolicyIn(PolicyIn):
@@ -100,19 +100,21 @@ def get_policy(filename: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{filename}")
-def update_policy(filename: str, body: PolicyIn, db: Session = Depends(get_db)):
+def update_policy(filename: str, body: PolicyIn, db: Session = Depends(get_db),
+                  user: User = Depends(require_roles("compliance"))):
     path = _path(filename)
     if not path.exists():
         raise HTTPException(404, "Policy not found")
     path.write_text(_render(body.title, body.url, body.body), encoding="utf-8")
     n = ingest_policies(db, only=filename)
-    log_event(db, f"user:{body.reviewer}", "policy_update", None, filename=filename, chunks=n)
+    log_event(db, f"user:{user.username}", "policy_update", None, filename=filename, chunks=n)
     db.commit()
     return get_policy(filename, db)
 
 
 @router.post("")
-def create_policy(body: NewPolicyIn, db: Session = Depends(get_db)):
+def create_policy(body: NewPolicyIn, db: Session = Depends(get_db),
+                  user: User = Depends(require_roles("compliance"))):
     if body.filename:
         filename = body.filename
     else:
@@ -125,15 +127,15 @@ def create_policy(body: NewPolicyIn, db: Session = Depends(get_db)):
         raise HTTPException(409, "A policy with this filename already exists")
     path.write_text(_render(body.title, body.url, body.body), encoding="utf-8")
     n = ingest_policies(db, only=filename)
-    log_event(db, f"user:{body.reviewer}", "policy_create", None, filename=filename, chunks=n)
+    log_event(db, f"user:{user.username}", "policy_create", None, filename=filename, chunks=n)
     db.commit()
     return get_policy(filename, db)
 
 
 @router.post("/reindex")
-def reindex_all(db: Session = Depends(get_db)):
+def reindex_all(db: Session = Depends(get_db), user: User = Depends(require_roles("compliance"))):
     n = ingest_policies(db)
-    log_event(db, "user:admin", "policy_reindex", None, chunks=n)
+    log_event(db, f"user:{user.username}", "policy_reindex", None, chunks=n)
     db.commit()
     return {"indexed_chunks": n}
 

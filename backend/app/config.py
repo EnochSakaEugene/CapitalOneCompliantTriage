@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     price_input_per_mtok_fast: float = 0.0
     price_output_per_mtok_fast: float = 0.0
 
+    # Sessions: set AUTH_SECRET to a long random value in .env (tokens are signed with it).
+    auth_secret: str = "dev-only-change-me-in-env"
+    session_hours: int = 8
+
     cors_origins: str = "http://localhost:3000"
     response_deadline_days: int = 15   # CFPB: company response expected within 15 days
     rag_top_k: int = 3

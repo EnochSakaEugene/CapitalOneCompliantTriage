@@ -1,35 +1,17 @@
 "use client";
-// Demo role switcher. v1 has no real login: the chosen role is kept in the browser
-// and used as the reviewer name on approvals/escalations. Replace with real auth later.
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+// Compatibility layer: pages read the current role/username from the logged-in user.
+import type { ReactNode } from "react";
+import { ROLE_LABELS, type Role } from "@/lib/access";
+import { useAuth } from "@/lib/auth";
 
-export type Role = "analyst" | "compliance" | "cx_leader";
-export const ROLE_LABELS: Record<Role, string> = {
-  analyst: "Complaint Analyst",
-  compliance: "Compliance Officer",
-  cx_leader: "CX Leader",
-};
-
-const RoleContext = createContext<{ role: Role; setRole: (r: Role) => void }>({
-  role: "analyst",
-  setRole: () => {},
-});
+export type { Role };
+export { ROLE_LABELS };
 
 export function RoleProvider({ children }: { children: ReactNode }) {
-  const [role, setRoleState] = useState<Role>("analyst");
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("triageiq-role") as Role | null;
-      if (saved && saved in ROLE_LABELS) setRoleState(saved);
-    } catch {}
-  }, []);
-  const setRole = (r: Role) => {
-    setRoleState(r);
-    try {
-      localStorage.setItem("triageiq-role", r);
-    } catch {}
-  };
-  return <RoleContext.Provider value={{ role, setRole }}>{children}</RoleContext.Provider>;
+  return <>{children}</>;
 }
 
-export const useRole = () => useContext(RoleContext);
+export function useRole() {
+  const { user } = useAuth();
+  return { role: (user?.role ?? "analyst") as Role, username: user?.username ?? "", setRole: () => {} };
+}

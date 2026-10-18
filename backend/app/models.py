@@ -155,3 +155,22 @@ class EvalCase(Base):
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     error: Mapped[str | None] = mapped_column(Text)
+
+
+class User(Base):
+    """A TriageIQ user. Passwords are stored only as salted PBKDF2 hashes."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    username: Mapped[str] = mapped_column(String(50), unique=True)
+    email: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    full_name: Mapped[str] = mapped_column(String(100))
+    role: Mapped[str] = mapped_column(String(20))           # analyst | compliance | cx_leader | admin
+    password_hash: Mapped[str] = mapped_column(String(300))
+    password_version: Mapped[int] = mapped_column(Integer, default=1)   # bump to invalidate old tokens
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime)
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -4,11 +4,14 @@ import { QueueTable } from "@/components/queue-table";
 import { Button, Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
 import { api } from "@/lib/api";
 import { useLive } from "@/lib/useLive";
+import { can } from "@/lib/access";
+import { useAuth } from "@/lib/auth";
 
 const STATUSES = ["", "new", "awaiting_review", "escalated", "approved", "closed"];
 const RISKS = ["", "high", "medium", "low"];
 
 export default function QueuePage() {
+  const { user } = useAuth();
   const [status, setStatus] = useState("");
   const [risk, setRisk] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,9 +47,11 @@ export default function QueuePage() {
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <RefreshControl updatedAt={live.updatedAt} loading={live.loading} onRefresh={load} />
-            <Button onClick={runBatch} disabled={busy}>
-              {busy ? "Running agents…" : "Triage next 10 incoming"}
-            </Button>
+            {can.triage(user?.role) && (
+              <Button onClick={runBatch} disabled={busy}>
+                {busy ? "Running agents…" : "Triage next 10 incoming"}
+              </Button>
+            )}
           </div>
         }
       />

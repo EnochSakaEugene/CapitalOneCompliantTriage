@@ -52,9 +52,9 @@ function Detail({ id }: { id: number }) {
           {String(data.config.prompt ?? "")} · {data.model} · seed {String(data.config.seed)}
           {data.config.few_shot_examples ? ` · ${String(data.config.few_shot_examples)} few-shot examples` : ""}
         </p>
-        <a href={`${API_URL}/api/eval/runs/${data.id}/cases.csv`} className="mt-2 inline-block text-sm text-navy hover:underline">
+        <button onClick={() => api.downloadEvalCsv(data.id)} className="mt-2 inline-block text-sm text-navy hover:underline">
           Download all cases (CSV)
-        </a>
+        </button>
       </Card>
       <Card title={`Misclassified examples (${data.misses.length}${data.misses.length === 50 ? "+" : ""})`}>
         <ul className="max-h-96 space-y-2 overflow-y-auto text-xs">

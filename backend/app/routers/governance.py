@@ -10,9 +10,10 @@ from app.audit import log_event
 from app.config import get_settings
 from app.db import get_db
 from app.llm import model_name
-from app.models import AuditEvent, Complaint, PolicyChunk, RiskItem, Triage
+from app.models import AuditEvent, Complaint, PolicyChunk, RiskItem, Triage, User
+from app.security import require_roles
 
-router = APIRouter(prefix="/governance")
+router = APIRouter(prefix="/governance", dependencies=[Depends(require_roles("compliance", "cx_leader"))])
 settings = get_settings()
 LEVELS = {"low", "medium", "high"}
 STATUSES = {"open", "monitoring", "mitigated"}
@@ -66,7 +67,6 @@ class RiskIn(BaseModel):
     mitigation: str = Field(default="", max_length=3000)
     owner: str = Field(default="Unassigned", max_length=100)
     status: str = "open"
-    reviewer: str = "analyst"
 
 
 def _seed(db: Session) -> None:
@@ -234,26 +234,27 @@ def list_risks(db: Session = Depends(get_db)):
 
 
 @router.post("/risks")
-def create_risk(body: RiskIn, db: Session = Depends(get_db)):
+def create_risk(body: RiskIn, db: Session = Depends(get_db), user: User = Depends(require_roles("compliance"))):
     _validate(body)
-    r = RiskItem(**body.model_dump(exclude={"reviewer"}))
+    r = RiskItem(**body.model_dump())
     db.add(r)
     db.flush()
-    log_event(db, f"user:{body.reviewer}", "risk_create", None, risk_id=r.id, risk=body.risk[:120])
+    log_event(db, f"user:{user.username}", "risk_create", None, risk_id=r.id, risk=body.risk[:120])
     db.commit()
     return _risk_dict(r)
 
 
 @router.put("/risks/{risk_id}")
-def update_risk(risk_id: int, body: RiskIn, db: Session = Depends(get_db)):
+def update_risk(risk_id: int, body: RiskIn, db: Session = Depends(get_db),
+                user: User = Depends(require_roles("compliance"))):
     _validate(body)
     r = db.get(RiskItem, risk_id)
     if not r:
         raise HTTPException(404, "Risk not found")
-    changes = {k: v for k, v in body.model_dump(exclude={"reviewer"}).items() if getattr(r, k) != v}
+    changes = {k: v for k, v in body.model_dump().items() if getattr(r, k) != v}
     for k, v in changes.items():
         setattr(r, k, v)
-    log_event(db, f"user:{body.reviewer}", "risk_update", None, risk_id=risk_id, changed=sorted(changes))
+    log_event(db, f"user:{user.username}", "risk_update", None, risk_id=risk_id, changed=sorted(changes))
     db.commit()
     db.refresh(r)
     return _risk_dict(r)

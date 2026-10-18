@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { useRole } from "@/components/role";
+import { can } from "@/lib/access";
 import { Button, Card, DeadlineChip, ErrorBox, FlagChips, Loading, RiskBadge, StatusPill } from "@/components/ui";
 import { api, type CaseDetail, type TraceStep } from "@/lib/api";
 
@@ -102,9 +103,11 @@ export default function CasePage() {
       {!t ? (
         <Card>
           <p className="mb-3 text-sm">This complaint has not been triaged yet.</p>
-          <Button onClick={() => act(() => api.triage(data.id))} disabled={busy}>
-            {busy ? "Running agents…" : "Run triage agents"}
-          </Button>
+          {can.triage(role) && (
+            <Button onClick={() => act(() => api.triage(data.id))} disabled={busy}>
+              {busy ? "Running agents…" : "Run triage agents"}
+            </Button>
+          )}
           <p className="mt-4 whitespace-pre-wrap text-sm text-gray-700">{data.narrative}</p>
         </Card>
       ) : (
@@ -202,7 +205,10 @@ export default function CasePage() {
                   className="w-full rounded-md border border-line p-3 text-sm outline-none focus:ring-2 focus:ring-navy/30 disabled:bg-gray-50 print:hidden"
                 />
                 <div className="hidden whitespace-pre-wrap rounded-md border border-line p-3 text-sm print:block">{reply}</div>
-                {!done && (
+                {!done && data.status === "escalated" && !can.close(role) && (
+                  <p className="mt-3 text-sm text-muted">Escalated to Compliance. Only a Compliance Officer can close this case.</p>
+                )}
+                {!done && (data.status !== "escalated" || can.close(role)) && (
                   <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
                     {data.status !== "escalated" ? (
                       <>

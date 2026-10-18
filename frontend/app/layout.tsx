@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
-import { RoleProvider } from "@/components/role";
+import { AuthProvider } from "@/lib/auth";
 import { Shell } from "@/components/shell";
 
 export const metadata: Metadata = {
@@ -13,9 +13,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body className="antialiased">
-        <RoleProvider>
+        <AuthProvider>
           <Shell>{children}</Shell>
-        </RoleProvider>
+        </AuthProvider>
       </body>
     </html>
   );

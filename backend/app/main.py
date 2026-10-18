@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.db import init_db
 from app.routers.api import router
+from app.routers.auth import router as auth_router
 from app.routers.evals import router as evals_router
 from app.routers.governance import router as governance_router
 from app.routers.knowledge import router as knowledge_router
@@ -27,6 +28,13 @@ async def lifespan(_: FastAPI):
         db.execute(update(EvalRun).where(EvalRun.status == "running")
                    .values(status="stopped", metrics={"note": "stopped by a server restart"}))
         db.commit()
+        # First start: create the demo users so the team can log in.
+        from scripts.seed_users import seed
+
+        if seed(db):
+            print("Created demo users (see backend/scripts/seed_users.py).")
+    if settings.auth_secret.startswith("dev-only"):
+        print("WARNING: AUTH_SECRET is not set; using an insecure development secret.")
     yield
 
 
@@ -37,7 +45,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth_router, prefix="/api")
 app.include_router(router, prefix="/api")
 app.include_router(knowledge_router, prefix="/api")
 app.include_router(governance_router, prefix="/api")
 app.include_router(evals_router, prefix="/api")
+
+
+@app.get("/api/ping")
+def ping():
+    """Public liveness check (no login needed)."""
+    return {"ok": True}

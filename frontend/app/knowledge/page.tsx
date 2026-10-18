@@ -6,6 +6,7 @@ import { useRole } from "@/components/role";
 import { Button, Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
 import { api, type Citation, type PolicyDetail, type PolicySummary } from "@/lib/api";
 import { useLive } from "@/lib/useLive";
+import { can } from "@/lib/access";
 
 const NEW_TEMPLATE = `## Section heading
 Plain-language summary of the rule or policy. Each "## " heading becomes one searchable section.
@@ -169,6 +170,8 @@ function Editor({
 }
 
 export default function KnowledgePage() {
+  const { role } = useRole();
+  const editor = can.editPolicies(role);
   const live = useLive(() => api.policies(), [], 30000);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<PolicyDetail | null>(null);
@@ -221,10 +224,14 @@ export default function KnowledgePage() {
         actions={
           <div className="flex flex-wrap items-center gap-3">
             <RefreshControl updatedAt={live.updatedAt} loading={live.loading} onRefresh={live.refresh} />
-            <Button variant="secondary" onClick={reindex} disabled={reindexing}>
-              {reindexing ? "Re-indexing…" : "Rebuild index"}
-            </Button>
-            <Button onClick={() => { setMode("new"); setNotice(null); }}>New policy</Button>
+            {editor && (
+              <>
+                <Button variant="secondary" onClick={reindex} disabled={reindexing}>
+                  {reindexing ? "Re-indexing…" : "Rebuild index"}
+                </Button>
+                <Button onClick={() => { setMode("new"); setNotice(null); }}>New policy</Button>
+              </>
+            )}
           </div>
         }
       />
@@ -300,9 +307,13 @@ export default function KnowledgePage() {
             <Card
               title={detail.filename}
               right={
-                <Button variant="secondary" onClick={() => setMode("edit")}>
-                  Edit
-                </Button>
+                editor ? (
+                  <Button variant="secondary" onClick={() => setMode("edit")}>
+                    Edit
+                  </Button>
+                ) : (
+                  <span className="text-xs text-muted">View only</span>
+                )
               }
             >
               <h2 className="text-lg font-semibold text-navy-dark">{detail.title}</h2>

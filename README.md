@@ -49,6 +49,26 @@ docker compose exec backend python -m scripts.ingest_policies
 
 Open http://localhost:3000 and click **Triage next 10 incoming**. API docs: http://localhost:8000/docs
 
+## Logging in (role-based access)
+
+Menus and data are only visible after login. Users are stored in the `users` table with salted
+PBKDF2 password hashes; sessions are signed tokens that expire after 8 hours and are invalidated
+when the password changes. Five failed attempts lock an account for 15 minutes. Every login,
+logout and password change is recorded in the audit log, and approvals/escalations are recorded
+under the logged-in user (the client can no longer choose the reviewer name).
+
+Demo accounts are created automatically on first start (DEMO ONLY: change passwords after login):
+
+| Role | Email | Password | Can |
+|---|---|---|---|
+| Complaint Analyst | analyst@triageiq.demo | Analyst#2026 | Triage, approve, escalate |
+| Compliance Officer | compliance@triageiq.demo | Comply#2026 | All analyst actions + close escalations, audit log, edit policies and risks |
+| CX Leader | cx@triageiq.demo | Insight#2026 | Insights, evaluation, knowledge base (view), governance (view) |
+| Administrator | admin@triageiq.demo | Admin#Triage26 | Everything |
+
+Reset demo passwords: `docker compose exec backend python -m scripts.seed_users --reset`.
+Set `AUTH_SECRET` in `.env` to a long random value (e.g. `openssl rand -hex 32`).
+
 ## Running without Docker
 
 ```bash

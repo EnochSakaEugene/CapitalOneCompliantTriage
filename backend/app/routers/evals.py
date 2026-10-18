@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.evaluation import per_product
 from app.models import EvalCase, EvalRun
+from app.security import current_user
 
-router = APIRouter(prefix="/eval")
+router = APIRouter(prefix="/eval", dependencies=[Depends(current_user)])
 
 VARIANT_LABELS = {
     "rules": "Keyword rules (non-GenAI baseline)",

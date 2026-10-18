@@ -11,15 +11,16 @@ from app.llm import model_name
 from app.audit import log_event
 from app.config import get_settings
 from app.db import get_db
-from app.models import AuditEvent, Complaint, PolicyChunk, Triage
+from app.models import AuditEvent, Complaint, PolicyChunk, Triage, User
+from app.security import current_user, require_roles
 from app.serializers import audit_dict, complaint_detail, complaint_row
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(current_user)])  # every endpoint needs a login
 settings = get_settings()
 
 
 class ReviewIn(BaseModel):
-    reviewer: str = "analyst"
+    # The reviewer is always the logged-in user; any "reviewer" sent by the client is ignored.
     final_reply: str | None = None
     reason: str | None = None
 
@@ -76,14 +77,15 @@ def get_complaint(complaint_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/triage/{complaint_id}")
-def triage_one(complaint_id: int, db: Session = Depends(get_db)):
+def triage_one(complaint_id: int, db: Session = Depends(get_db), _: User = Depends(require_roles("analyst", "compliance"))):
     c = _get(db, complaint_id)
     run_triage(db, c)
     return get_complaint(complaint_id, db)
 
 
 @router.post("/triage-batch")
-def triage_batch(limit: int = Query(10, le=200), db: Session = Depends(get_db)):
+def triage_batch(limit: int = Query(10, le=200), db: Session = Depends(get_db),
+                 _: User = Depends(require_roles("analyst", "compliance"))):
     """Triage the next N untriaged complaints from the test split (the 'incoming' queue)."""
     ids = db.scalars(
         select(Complaint.id).outerjoin(Triage).where(Triage.id.is_(None), Complaint.split == "test")
@@ -101,39 +103,42 @@ def triage_batch(limit: int = Query(10, le=200), db: Session = Depends(get_db)):
 
 
 @router.post("/cases/{complaint_id}/approve")
-def approve(complaint_id: int, body: ReviewIn, db: Session = Depends(get_db)):
+def approve(complaint_id: int, body: ReviewIn, db: Session = Depends(get_db),
+            user: User = Depends(require_roles("analyst", "compliance"))):
     c = _get(db, complaint_id)
     if not c.triage:
         raise HTTPException(400, "Complaint has not been triaged")
     edited = body.final_reply is not None and body.final_reply != c.triage.draft_reply
     c.triage.final_reply = body.final_reply or c.triage.draft_reply
-    c.triage.reviewer = body.reviewer
+    c.triage.reviewer = user.username
     c.status = "approved"
-    log_event(db, f"user:{body.reviewer}", "approve", complaint_id, edited=edited)
+    log_event(db, f"user:{user.username}", "approve", complaint_id, edited=edited)
     db.commit()
     return get_complaint(complaint_id, db)
 
 
 @router.post("/cases/{complaint_id}/escalate")
-def escalate(complaint_id: int, body: ReviewIn, db: Session = Depends(get_db)):
+def escalate(complaint_id: int, body: ReviewIn, db: Session = Depends(get_db),
+             user: User = Depends(require_roles("analyst", "compliance"))):
     c = _get(db, complaint_id)
     c.status = "escalated"
     if c.triage:
         c.triage.route = "compliance"
-    log_event(db, f"user:{body.reviewer}", "escalate", complaint_id, reason=body.reason)
+    log_event(db, f"user:{user.username}", "escalate", complaint_id, reason=body.reason)
     db.commit()
     return get_complaint(complaint_id, db)
 
 
 @router.post("/cases/{complaint_id}/close")
-def close(complaint_id: int, body: ReviewIn, db: Session = Depends(get_db)):
+def close(complaint_id: int, body: ReviewIn, db: Session = Depends(get_db),
+          user: User = Depends(require_roles("compliance"))):
     """Compliance closes an escalated case after handling it."""
     c = _get(db, complaint_id)
     c.status = "closed"
     if c.triage and body.final_reply:
         c.triage.final_reply = body.final_reply
-        c.triage.reviewer = body.reviewer
-    log_event(db, f"user:{body.reviewer}", "close", complaint_id, reason=body.reason)
+        c.triage.reviewer = user.username
+    log_event(db, f"user:{user.username}", "close", complaint_id, reason=body.reason)
     db.commit()
     return get_complaint(complaint_id, db)
 
@@ -181,7 +186,8 @@ def evaluation(db: Session = Depends(get_db)):
 
 
 @router.get("/audit")
-def audit(limit: int = Query(100, le=1000), db: Session = Depends(get_db)):
+def audit(limit: int = Query(100, le=1000), db: Session = Depends(get_db),
+          _: User = Depends(require_roles("compliance"))):
     events = db.scalars(select(AuditEvent).order_by(AuditEvent.id.desc()).limit(limit)).all()
     return [audit_dict(e) for e in events]
 

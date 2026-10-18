@@ -1,5 +1,15 @@
 // Typed client for the TriageIQ FastAPI back end.
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+export const TOKEN_KEY = "triageiq-token";
+
+export function authHeaders(): Record<string, string> {
+  try {
+    const t = localStorage.getItem(TOKEN_KEY);
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 export type Risk = "low" | "medium" | "high";
 
@@ -194,9 +204,10 @@ export interface EvalRunDetail extends EvalRunSummary {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}/api${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    headers: { "Content-Type": "application/json", ...authHeaders(), ...(init?.headers ?? {}) },
     cache: "no-store",
   });
+  if (res.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event("triageiq:unauthorized"));
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}: ${await res.text()}`);
   return res.json() as Promise<T>;
 }
@@ -262,8 +273,15 @@ export const api = {
   evalRun: (id: number) => request<EvalRunDetail>(`/eval/runs/${id}`),
   evalReportMd: async (name?: string) => {
     const qs = name ? `?name=${encodeURIComponent(name)}` : "";
-    const res = await fetch(`${API_URL}/api/eval/report.md${qs}`, { cache: "no-store" });
+    const res = await fetch(`${API_URL}/api/eval/report.md${qs}`, { cache: "no-store", headers: authHeaders() });
     return res.text();
+  },
+  downloadEvalCsv: async (id: number) => {
+    const res = await fetch(`${API_URL}/api/eval/runs/${id}/cases.csv`, { headers: authHeaders() });
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement("a"), { href: url, download: `eval_run_${id}.csv` });
+    a.click();
+    URL.revokeObjectURL(url);
   },
   risks: () => request<RiskItem[]>("/governance/risks"),
   saveRisk: (r: Omit<RiskItem, "updated_at" | "indicator"> & { reviewer: string }) =>
