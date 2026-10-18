@@ -76,6 +76,24 @@ export interface CaseDetail {
   audit: AuditEvent[];
 }
 
+export interface PolicySummary {
+  filename: string;
+  title: string;
+  url: string | null;
+  sections: number;
+  cited: number;
+  index_state: "indexed" | "stale" | "not_indexed";
+}
+
+export interface PolicyDetail {
+  filename: string;
+  title: string;
+  url: string | null;
+  body: string;
+  index_state: PolicySummary["index_state"];
+  sections: { title: string; text: string; cited: number }[];
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}/api${path}`, {
     ...init,
@@ -126,4 +144,16 @@ export const api = {
       confusion?: { actual: string; predicted: string; count: number }[];
     }>("/evaluation"),
   audit: (limit = 200) => request<AuditEvent[]>(`/audit?limit=${limit}`),
+  policies: () => request<{ documents: PolicySummary[]; indexed_chunks: number }>("/policies"),
+  policy: (filename: string) => request<PolicyDetail>(`/policies/${filename}`),
+  savePolicy: (filename: string, p: { title: string; url: string | null; body: string; reviewer: string }) =>
+    request<PolicyDetail>(`/policies/${filename}`, { method: "PUT", body: JSON.stringify(p) }),
+  createPolicy: (p: { title: string; url: string | null; body: string; reviewer: string }) =>
+    request<PolicyDetail>("/policies", { method: "POST", body: JSON.stringify(p) }),
+  reindex: () => request<{ indexed_chunks: number }>("/policies/reindex", { method: "POST" }),
+  searchPolicies: (query: string, k = 5) =>
+    request<{ query: string; results: Citation[] }>("/policies/search", {
+      method: "POST",
+      body: JSON.stringify({ query, k }),
+    }),
 };

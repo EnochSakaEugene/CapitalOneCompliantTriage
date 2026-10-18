@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import get_settings
 from app.db import init_db
 from app.routers.api import router
+from app.routers.knowledge import router as knowledge_router
 
 settings = get_settings()
 
@@ -25,3 +26,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router, prefix="/api")
+app.include_router(knowledge_router, prefix="/api")

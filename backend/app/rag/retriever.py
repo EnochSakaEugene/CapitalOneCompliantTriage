@@ -18,37 +18,49 @@ settings = get_settings()
 POLICY_DIR = Path(__file__).parent / "policies"
 
 
-def _parse(path: Path) -> list[dict]:
-    lines = path.read_text(encoding="utf-8").splitlines()
+def split_front_matter(raw: str) -> tuple[dict, str]:
+    """Return ({title, url, ...}, body) from a policy file's text."""
+    lines = raw.splitlines()
     meta, body_start = {}, 0
-    for i, line in enumerate(lines):
-        if line.strip() == "---" and i > 0:
-            body_start = i + 1
-            break
-        if ":" in line and line.strip() != "---":
-            key, val = line.split(":", 1)
-            meta[key.strip().lower()] = val.strip()
-    body = "\n".join(lines[body_start:])
-    chunks, current_head, buf = [], meta.get("title", path.stem), []
+    if lines and lines[0].strip() == "---":
+        for i, line in enumerate(lines[1:], start=1):
+            if line.strip() == "---":
+                body_start = i + 1
+                break
+            if ":" in line:
+                key, val = line.split(":", 1)
+                meta[key.strip().lower()] = val.strip()
+    return meta, "\n".join(lines[body_start:]).strip()
+
+
+def parse_text(name: str, raw: str) -> list[dict]:
+    """Split one policy file into chunks on '## ' headings."""
+    meta, body = split_front_matter(raw)
+    doc_title = meta.get("title", Path(name).stem)
+    chunks, current_head, buf = [], doc_title, []
     for line in body.splitlines():
         if line.startswith("## "):
             if "".join(buf).strip():
                 chunks.append((current_head, "\n".join(buf).strip()))
-            current_head, buf = f"{meta.get('title', path.stem)}: {line[3:].strip()}", []
+            current_head, buf = f"{doc_title}: {line[3:].strip()}", []
         else:
             buf.append(line)
     if "".join(buf).strip():
         chunks.append((current_head, "\n".join(buf).strip()))
-    return [
-        {"source_file": path.name, "title": head, "url": meta.get("url"), "text": text}
-        for head, text in chunks
-    ]
+    return [{"source_file": name, "title": head, "url": meta.get("url"), "text": text} for head, text in chunks]
 
 
-def ingest_policies(db: Session) -> int:
-    """(Re)load every policy file. Returns the number of chunks stored."""
-    records = [c for p in sorted(POLICY_DIR.glob("*.md")) for c in _parse(p)]
-    db.execute(delete(PolicyChunk))
+def _parse(path: Path) -> list[dict]:
+    return parse_text(path.name, path.read_text(encoding="utf-8"))
+
+
+def ingest_policies(db: Session, only: str | None = None) -> int:
+    """(Re)embed policy files: all of them, or just the file named `only`.
+    Returns the number of chunks stored."""
+    paths = [POLICY_DIR / only] if only else sorted(POLICY_DIR.glob("*.md"))
+    records = [c for p in paths if p.exists() for c in _parse(p)]
+    q = delete(PolicyChunk)
+    db.execute(q.where(PolicyChunk.source_file == only) if only else q)
     if records:
         vectors = embed([f"{r['title']}\n{r['text']}" for r in records])
         for rec, vec in zip(records, vectors):

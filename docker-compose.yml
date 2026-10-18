@@ -21,7 +21,10 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://triage:triage@db:5432/triage
     ports: ["8000:8000"]
-    volumes: ["./data:/data"]
+    volumes:
+      - ./data:/data
+      # Knowledge Base edits are saved to the repo folder, so they survive rebuilds and can be committed
+      - ./backend/app/rag/policies:/app/app/rag/policies
     depends_on:
       db: { condition: service_healthy }
 
