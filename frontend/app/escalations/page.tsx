@@ -1,27 +1,23 @@
 "use client";
-import { useEffect, useState } from "react";
 import { QueueTable } from "@/components/queue-table";
-import { Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
-import { api, type QueueRow } from "@/lib/api";
+import { Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
+import { api } from "@/lib/api";
+import { useLive } from "@/lib/useLive";
 
 export default function EscalationsPage() {
-  const [rows, setRows] = useState<QueueRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .complaints({ status: "escalated", limit: "200" })
-      .then((r) => setRows(r.items))
-      .catch((e) => setError(String(e)));
-  }, []);
+  const { data, error, updatedAt, loading, refresh } = useLive(() =>
+    api.complaints({ status: "escalated", limit: "200" }),
+  );
+  const rows = data?.items ?? null;
 
   return (
     <>
       <PageHeader
         title="Escalations"
         subtitle="High-risk complaints routed to Compliance: fraud, identity theft, discrimination, servicemember and legal threats."
+        actions={<RefreshControl updatedAt={updatedAt} loading={loading} onRefresh={refresh} />}
       />
-      <Card>{error ? <ErrorBox error={error} /> : rows ? <QueueTable rows={rows} /> : <Loading />}</Card>
+      <Card right={data ? <span className="text-sm text-muted">{data.total} escalated</span> : undefined}>{error && !rows ? <ErrorBox error={error} /> : rows ? <QueueTable rows={rows} /> : <Loading />}</Card>
     </>
   );
 }

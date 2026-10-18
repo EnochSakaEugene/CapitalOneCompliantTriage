@@ -1,23 +1,21 @@
 "use client";
-import { useEffect, useState } from "react";
 import { Bars } from "@/components/bars";
-import { Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
+import { Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
 import { api } from "@/lib/api";
-
-type Insights = Awaited<ReturnType<typeof api.insights>>;
+import { useLive } from "@/lib/useLive";
 
 export default function InsightsPage() {
-  const [d, setD] = useState<Insights | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    api.insights().then(setD).catch((e) => setError(String(e)));
-  }, []);
-  if (error) return <ErrorBox error={error} />;
+  const { data: d, error, updatedAt, loading, refresh } = useLive(() => api.insights());
+  if (error && !d) return <ErrorBox error={error} />;
   if (!d) return <Loading />;
   const risk = d.by_risk;
   return (
     <>
-      <PageHeader title="Insights" subtitle="Complaint patterns across triaged cases, for root-cause and CX teams." />
+      <PageHeader
+        title="Insights"
+        subtitle="Complaint patterns across triaged cases, for root-cause and CX teams."
+        actions={<RefreshControl updatedAt={updatedAt} loading={loading} onRefresh={refresh} />}
+      />
       <div className="mb-4 grid gap-4 sm:grid-cols-4">
         {[
           ["Triaged", d.triaged, "text-navy-dark"],

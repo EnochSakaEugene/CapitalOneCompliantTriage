@@ -116,3 +116,24 @@ export function ErrorBox({ error }: { error: string }) {
 export function Loading() {
   return <p className="text-sm text-muted">Loading…</p>;
 }
+
+export function RefreshControl({
+  updatedAt,
+  loading,
+  onRefresh,
+}: {
+  updatedAt: Date | null;
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 text-xs text-muted print:hidden">
+      <span>
+        {loading ? "Updating…" : updatedAt ? `Updated ${updatedAt.toLocaleTimeString()} · auto-refreshes` : ""}
+      </span>
+      <Button variant="secondary" onClick={onRefresh} disabled={loading}>
+        Refresh
+      </Button>
+    </div>
+  );
+}

@@ -1,25 +1,20 @@
 "use client";
-import { useEffect, useState } from "react";
-import { Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
+import { Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
 import { api } from "@/lib/api";
-
-type Evaluation = Awaited<ReturnType<typeof api.evaluation>>;
+import { useLive } from "@/lib/useLive";
 
 const pct = (v?: number) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
 
 export default function EvaluationPage() {
-  const [d, setD] = useState<Evaluation | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    api.evaluation().then(setD).catch((e) => setError(String(e)));
-  }, []);
-  if (error) return <ErrorBox error={error} />;
+  const { data: d, error, updatedAt, loading, refresh } = useLive(() => api.evaluation());
+  if (error && !d) return <ErrorBox error={error} />;
   if (!d) return <Loading />;
   return (
     <>
       <PageHeader
         title="Evaluation"
         subtitle="AI labels compared with the CFPB's own product and issue labels on triaged complaints."
+        actions={<RefreshControl updatedAt={updatedAt} loading={loading} onRefresh={refresh} />}
       />
       {d.n === 0 ? (
         <Card>

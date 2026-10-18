@@ -1,22 +1,19 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
-import { api, type AuditEvent } from "@/lib/api";
+import { Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
+import { api } from "@/lib/api";
+import { useLive } from "@/lib/useLive";
 
 export default function AuditPage() {
-  const [rows, setRows] = useState<AuditEvent[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    api.audit(300).then(setRows).catch((e) => setError(String(e)));
-  }, []);
-  if (error) return <ErrorBox error={error} />;
+  const { data: rows, error, updatedAt, loading, refresh } = useLive(() => api.audit(300));
+  if (error && !rows) return <ErrorBox error={error} />;
   if (!rows) return <Loading />;
   return (
     <>
       <PageHeader
         title="Audit Log"
         subtitle="Every agent step and human decision, newest first. Supports the governance framework and risk register."
+        actions={<RefreshControl updatedAt={updatedAt} loading={loading} onRefresh={refresh} />}
       />
       <Card>
         <div className="overflow-x-auto">

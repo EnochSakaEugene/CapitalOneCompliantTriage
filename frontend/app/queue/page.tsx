@@ -1,35 +1,24 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { QueueTable } from "@/components/queue-table";
-import { Button, Card, ErrorBox, Loading, PageHeader } from "@/components/ui";
-import { api, type QueueRow } from "@/lib/api";
+import { Button, Card, ErrorBox, Loading, PageHeader, RefreshControl } from "@/components/ui";
+import { api } from "@/lib/api";
+import { useLive } from "@/lib/useLive";
 
 const STATUSES = ["", "new", "awaiting_review", "escalated", "approved", "closed"];
 const RISKS = ["", "high", "medium", "low"];
 
 export default function QueuePage() {
-  const [rows, setRows] = useState<QueueRow[] | null>(null);
-  const [total, setTotal] = useState(0);
   const [status, setStatus] = useState("");
   const [risk, setRisk] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [batchError, setBatchError] = useState<string | null>(null);
   const [mock, setMock] = useState<boolean | null>(null);
-
-  const load = useCallback(async () => {
-    try {
-      const res = await api.complaints({ status, risk, limit: "100" });
-      setRows(res.items);
-      setTotal(res.total);
-      setError(null);
-    } catch (e) {
-      setError(String(e));
-    }
-  }, [status, risk]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
+  const live = useLive(() => api.complaints({ status, risk, limit: "100" }), [status, risk]);
+  const rows = live.data?.items ?? null;
+  const total = live.data?.total ?? 0;
+  const error = batchError ?? (rows ? null : live.error);
+  const load = live.refresh;
   useEffect(() => {
     api.health().then((h) => setMock(h.mock_llm)).catch(() => {});
   }, []);
@@ -37,10 +26,11 @@ export default function QueuePage() {
   const runBatch = async () => {
     setBusy(true);
     try {
+      setBatchError(null);
       await api.triageBatch(10);
       await load();
     } catch (e) {
-      setError(String(e));
+      setBatchError(String(e));
     } finally {
       setBusy(false);
     }
@@ -52,9 +42,12 @@ export default function QueuePage() {
         title="Triage Queue"
         subtitle="AI-triaged complaints, most urgent first. Every reply needs analyst approval."
         actions={
-          <Button onClick={runBatch} disabled={busy}>
-            {busy ? "Running agents…" : "Triage next 10 incoming"}
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <RefreshControl updatedAt={live.updatedAt} loading={live.loading} onRefresh={load} />
+            <Button onClick={runBatch} disabled={busy}>
+              {busy ? "Running agents…" : "Triage next 10 incoming"}
+            </Button>
+          </div>
         }
       />
       {mock && (
