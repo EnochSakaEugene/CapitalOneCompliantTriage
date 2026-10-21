@@ -3,31 +3,42 @@
 // RAG ablation (hallucination with vs without retrieved policy excerpts).
 import { useEffect, useState } from "react";
 import { api, type Approach, type DraftingRun, type EvalRunSummary } from "@/lib/api";
+import { useLive } from "@/lib/useLive";
 import { Card, ErrorBox, Loading } from "./ui";
 
 const pct = (v?: number | null) => (v == null ? "—" : `${(v * 100).toFixed(1)}%`);
 
 export function Adaptation() {
-  const [approaches, setApproaches] = useState<Approach[] | null>(null);
-  const [runs, setRuns] = useState<EvalRunSummary[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    Promise.all([api.approaches(), api.evalRuns()])
-      .then(([a, r]) => { setApproaches(a); setRuns(r); })
-      .catch((e) => setError(String(e)));
-  }, []);
-  if (error) return <ErrorBox error={error} />;
-  if (!approaches) return <Loading />;
-  // latest finished run per variant, any batch
-  const latest = new Map<string, EvalRunSummary>();
-  for (const r of runs) if (r.status === "done" && !latest.has(r.variant)) latest.set(r.variant, r);
+  const approaches = useLive<Approach[]>(() => api.approaches(), [], 0);
+  const runsLive = useLive<EvalRunSummary[]>(() => api.evalRuns(), [], 15000);
+  const [picked, setPicked] = useState<string | null>(null);
+  if ((approaches.error && !approaches.data) || (runsLive.error && !runsLive.data))
+    return <ErrorBox error={approaches.error ?? runsLive.error ?? ""} />;
+  if (!approaches.data || !runsLive.data) return <Loading />;
+  const keys = new Set(approaches.data.map((a) => a.key));
+  const done = runsLive.data.filter((r) => r.status === "done" && keys.has(r.variant));
+  // Batches ranked by how many approaches they cover (fair comparison = same complaints).
+  const coverage = new Map<string, Set<string>>();
+  for (const r of done) coverage.set(r.name, (coverage.get(r.name) ?? new Set()).add(r.variant));
+  const batches = [...coverage.entries()].sort((a, b) => b[1].size - a[1].size).map(([n]) => n);
+  const batch = picked && batches.includes(picked) ? picked : batches[0] ?? null;
+  const inBatch = new Map<string, EvalRunSummary>();
+  for (const r of done) if (r.name === batch && !inBatch.has(r.variant)) inBatch.set(r.variant, r);
   return (
-    <Card title="Model adaptation: prompting vs trained models vs fine-tuning">
+    <Card
+      title="Model adaptation: prompting vs trained models vs fine-tuning"
+      right={batches.length > 0 ? (
+        <select value={batch ?? ""} onChange={(e) => setPicked(e.target.value)} className="rounded border border-line px-2 py-1 text-sm"
+          title="Measured columns come from this batch only (same complaints for every approach)">
+          {batches.map((b) => <option key={b} value={b}>{b} ({coverage.get(b)!.size} approaches)</option>)}
+        </select>
+      ) : undefined}
+    >
       <p className="mb-3 text-sm text-muted">
-        Measured columns use the latest finished run of each approach (run them on the same batch for a fair comparison:
-        <code className="mx-1 rounded bg-gray-100 px-1">run_eval --variants rules,tfidf,embed,v2,v4</code>).
-        Full LLM fine-tuning was not built: it needs GPUs and labelled data, sends training data to a provider, and must be
-        redone whenever products, issues or regulations change, while prompting and RAG change with a text edit.
+        Measured columns come from one batch, so every approach is scored on the same complaints. Add a missing approach to it with
+        <code className="mx-1 rounded bg-gray-100 px-1">run_eval --resume &quot;{batch ?? "batch name"}&quot; --variants rules,tfidf,embed,v2,v4</code>.
+        Full LLM fine-tuning was not built: it needs GPUs and labelled data, sends training data to a provider, and must be redone
+        whenever products, issues or regulations change, while prompting and RAG change with a text edit.
       </p>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[980px] text-left text-sm">
@@ -35,6 +46,7 @@ export function Adaptation() {
             <tr>
               <th className="py-1 pr-3">Approach</th>
               <th className="py-1 pr-3 text-right">Product acc.</th>
+              <th className="py-1 pr-3 text-right">Macro-F1</th>
               <th className="py-1 pr-3 text-right">Issue acc.</th>
               <th className="py-1 pr-3 text-right">Latency</th>
               <th className="py-1 pr-3">Cost</th>
@@ -44,16 +56,21 @@ export function Adaptation() {
             </tr>
           </thead>
           <tbody>
-            {approaches.map((a) => {
-              const r = latest.get(a.key);
+            {approaches.data.map((a) => {
+              const r = inBatch.get(a.key);
               const m = r?.metrics;
+              const notMeasured = a.key === "rag" || a.key === "finetune";
               return (
                 <tr key={a.key} className="border-t border-line align-top">
                   <td className="py-2 pr-3">
                     <div className="font-medium text-navy-dark">{a.approach}</div>
-                    <div className="text-xs text-muted">{a.family}{r ? ` · n=${m?.n}` : ""}</div>
+                    <div className="text-xs text-muted">
+                      {a.family}
+                      {r ? ` · n=${m?.n}` : notMeasured ? (a.key === "rag" ? " · see RAG ablation below" : "") : " · not run in this batch"}
+                    </div>
                   </td>
                   <td className="py-2 pr-3 text-right tabular-nums">{pct(m?.product_accuracy)}</td>
+                  <td className="py-2 pr-3 text-right tabular-nums">{m?.product_macro_f1 != null ? m.product_macro_f1.toFixed(3) : "—"}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{pct(m?.issue_accuracy)}</td>
                   <td className="py-2 pr-3 text-right tabular-nums">{m?.latency_ms_mean != null ? `${m.latency_ms_mean} ms` : "—"}</td>
                   <td className="py-2 pr-3 text-xs">{a.cost}</td>

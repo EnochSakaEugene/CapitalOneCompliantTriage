@@ -173,7 +173,8 @@ def research_node(state: TriageState, db: Session) -> TriageState:
     citations = retrieve(db, query)
     return {
         "citations": citations,
-        "trace": _step(state, "research", t0, retrieved=[x["title"] for x in citations]),
+        "trace": _step(state, "research", t0, retrieved=[x["title"] for x in citations],
+                       method=citations[0]["method"] if citations else "none"),
     }
 
 

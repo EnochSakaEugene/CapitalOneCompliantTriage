@@ -114,7 +114,9 @@ def main() -> None:
             out = call(lambda: classify("rules" if settings.mock_llm else settings.classifier_prompt_version,
                                         text, taxonomy), pacer, budget)
             cls, _ = snap_to_taxonomy(out["result"], taxonomy)
-            citations = retrieve(db, f"{cls['product']} {cls['issue']}\n{cls['summary']}")
+            query = f"{cls['product']} {cls['issue']}\n{cls['summary']}"
+            # no keyword fallback here: every case in the experiment must use embedding retrieval
+            citations = call(lambda: retrieve(db, query, allow_fallback=False), pacer, budget, llm=False)
             for v in VARIANTS:
                 t0 = time.perf_counter()
                 reply, usage = call(lambda: write_draft(cls, citations, text, use_rag=(v == "draft-rag")), pacer, budget)

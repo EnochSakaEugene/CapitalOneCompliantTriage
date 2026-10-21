@@ -92,7 +92,11 @@ export function Experiments() {
   const batchRuns = runs.filter((r) => r.name === current);
   const rows = latestPerVariant(batchRuns).filter((r) => r.status === "done");
   const running = batchRuns.filter((r) => r.status === "running");
-  const stopped = batchRuns.filter((r) => r.status === "stopped" || r.status === "failed");
+  // Ignore an old stopped/failed attempt once a later run of the same variant has finished.
+  const stopped = batchRuns.filter(
+    (r) => (r.status === "stopped" || r.status === "failed") &&
+      !batchRuns.some((o) => o.variant === r.variant && o.status === "done" && o.id > r.id),
+  );
 
   const copyMd = async () => {
     try {

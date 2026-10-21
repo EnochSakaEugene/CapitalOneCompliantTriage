@@ -150,3 +150,20 @@ def test_tfidf_variant_runs():
         assert out["result"]["product"] and out["usage"]["input_tokens"] == 0
     finally:
         db.close()
+
+
+def test_retrieval_falls_back_to_keywords_when_embedding_fails(client, monkeypatch):
+    from app.rag import retriever
+
+    def boom(*a, **k):
+        raise RuntimeError("429 RESOURCE_EXHAUSTED: embed_content_free_tier_requests per day")
+
+    monkeypatch.setattr(retriever, "embed", boom)
+    db = SessionLocal()
+    try:
+        hits = retriever.retrieve(db, "unauthorized credit card charge billing error dispute")
+        assert hits and hits[0]["method"] == "keywords (fallback)"
+        with pytest.raises(RuntimeError):
+            retriever.retrieve(db, "billing error", allow_fallback=False)
+    finally:
+        db.close()
